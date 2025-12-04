@@ -3,6 +3,7 @@ import * as exec from '@actions/exec'
 import * as tc from '@actions/tool-cache'
 import * as path from 'path'
 import * as os from 'os'
+import * as yaml from 'yaml'
 import {
   OCAML_VERSION,
   OPAM_DISABLE_SANDBOXING,
@@ -149,10 +150,7 @@ export async function setupOpamEnv(): Promise<void> {
   }
 }
 
-export async function addRepository(
-  name: string,
-  url: string
-): Promise<void> {
+export async function addRepository(name: string, url: string): Promise<void> {
   core.info(`Adding opam repository: ${name} (${url})`)
   await exec.exec('opam', ['repository', 'add', name, url, '--yes'])
 }
@@ -162,24 +160,26 @@ export async function setupRepositories(): Promise<void> {
     // Always add rocq-released repository
     await addRepository(
       'rocq-released',
-      'https://github.com/coq/opam-rocq-archive.git'
+      'https://rocq-prover.org/opam/released'
     )
 
     // Add any additional repositories from input
     const opamReposInput = core.getInput('opam-repositories')
     if (opamReposInput) {
-      const repos = opamReposInput
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0)
+      try {
+        const repositoriesYaml = yaml.parse(opamReposInput) as Record<
+          string,
+          string
+        >
+        const repositories = Object.entries(repositoriesYaml).reverse()
 
-      for (const repo of repos) {
-        const [name, url] = repo.split(':').map(s => s.trim())
-        if (name && url) {
+        for (const [name, url] of repositories) {
           await addRepository(name, url)
-        } else {
+        }
+      } catch (error) {
+        if (error instanceof Error) {
           core.warning(
-            `Invalid repository format: "${repo}". Expected "name:url"`
+            `Failed to parse opam-repositories as YAML: ${error.message}`
           )
         }
       }

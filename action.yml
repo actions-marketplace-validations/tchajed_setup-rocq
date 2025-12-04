@@ -13,7 +13,7 @@ inputs:
     description: The version of Rocq to install
     default: 'latest'
   opam-repositories:
-    description: Additional opam repositories to add (name:url pairs, one per line)
+    description: 'Additional opam repositories to add (YAML name:url object)'
     required: false
     default: ''
 
