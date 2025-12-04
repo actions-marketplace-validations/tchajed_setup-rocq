@@ -11,7 +11,7 @@ import {
   IS_MACOS
 } from './constants.js'
 
-const OPAM_VERSION = '2.2.1'
+const OPAM_VERSION = '2.5.0'
 
 function getOpamUrl(): string {
   if (IS_WINDOWS) {
@@ -64,6 +64,7 @@ export async function initializeOpam(): Promise<void> {
   core.exportVariable('OPAMROOT', opamRoot)
   core.exportVariable('OPAMYES', '1')
   core.exportVariable('OPAMCONFIRMLEVEL', 'unsafe-yes')
+  core.exportVariable('OPAMROOTISOK', 'true')
 
   const args = ['init', '--bare', '--disable-sandboxing']
 
