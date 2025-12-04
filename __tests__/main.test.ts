@@ -15,15 +15,19 @@ const mockSetupOpam = jest.fn<() => Promise<void>>()
 const mockSetupRepositories = jest.fn<() => Promise<void>>()
 const mockCreateSwitch = jest.fn<() => Promise<void>>()
 const mockSetupOpamEnv = jest.fn<() => Promise<void>>()
-const mockInstallRocq = jest.fn<(version: string) => Promise<void>>()
 const mockOpamList = jest.fn<() => Promise<void>>()
 const mockOpam = {
   setupOpam: mockSetupOpam,
   setupRepositories: mockSetupRepositories,
   createSwitch: mockCreateSwitch,
   setupOpamEnv: mockSetupOpamEnv,
-  installRocq: mockInstallRocq,
   opamList: mockOpamList,
+}
+
+// Mock rocq module
+const mockInstallRocq = jest.fn<(version: string) => Promise<void>>()
+const mockRocq = {
+  installRocq: mockInstallRocq,
 }
 
 // Mock unix module
@@ -36,6 +40,7 @@ const mockUnix = {
 jest.unstable_mockModule('@actions/core', () => core)
 jest.unstable_mockModule('../src/cache.js', () => mockCache)
 jest.unstable_mockModule('../src/opam.js', () => mockOpam)
+jest.unstable_mockModule('../src/rocq.js', () => mockRocq)
 jest.unstable_mockModule('../src/unix.js', () => mockUnix)
 
 // The module being tested should be imported dynamically.
@@ -76,7 +81,7 @@ describe('main.ts', () => {
     expect(mockSetupRepositories).toHaveBeenCalled()
     expect(mockCreateSwitch).toHaveBeenCalled()
     expect(mockSetupOpamEnv).toHaveBeenCalled()
-    // expect(mockInstallRocq).toHaveBeenCalledWith('latest')
+    expect(mockInstallRocq).toHaveBeenCalledWith('latest')
     expect(core.setFailed).not.toHaveBeenCalled()
   })
 
@@ -98,7 +103,7 @@ describe('main.ts', () => {
 
     // But environment setup should still run
     expect(mockSetupOpamEnv).toHaveBeenCalled()
-    // expect(mockInstallRocq).toHaveBeenCalledWith('latest')
+    expect(mockInstallRocq).toHaveBeenCalledWith('latest')
     expect(core.setFailed).not.toHaveBeenCalled()
   })
 

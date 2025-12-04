@@ -92170,38 +92170,6 @@ async function opamPin(pkg, target, options = []) {
         ...options,
     ]);
 }
-async function installRocqDev() {
-    coreExports.info('Installing Rocq dev version');
-    // Pin dev packages from git repositories
-    await opamPin('rocq-runtime.dev', 'git+https://github.com/rocq-prover/rocq.git');
-    await opamPin('rocq-core.dev', 'git+https://github.com/rocq-prover/rocq.git');
-    await opamPin('coq-core.dev', 'git+https://github.com/rocq-prover/rocq.git');
-    await opamPin('coq-stdlib.dev', 'git+https://github.com/rocq-prover/stdlib.git');
-    await opamPin('coq.dev', '--dev-repo');
-    // Install the pinned packages
-    await opamInstall('coq.dev', ['--unset-root']);
-}
-async function installRocqLatest() {
-    coreExports.info('Installing latest Rocq version');
-    await opamInstall('coq', ['--unset-root']);
-}
-async function installRocqVersion(version) {
-    coreExports.info(`Installing Rocq version ${version}`);
-    await opamInstall(`coq.${version}`, ['--unset-root']);
-}
-async function installRocq(version) {
-    await coreExports.group('Installing Rocq', async () => {
-        if (version === 'dev') {
-            await installRocqDev();
-        }
-        else if (version === 'latest') {
-            await installRocqLatest();
-        }
-        else {
-            await installRocqVersion(version);
-        }
-    });
-}
 async function opamList() {
     await coreExports.group('installed opam packages', async () => {
         await execExports.exec('opam', ['list', '--installed']);
@@ -92248,6 +92216,39 @@ async function restoreCache() {
         coreExports.saveState('CACHE_KEY', cacheKey);
         return false;
     }
+}
+
+async function installRocqDev() {
+    coreExports.info('Installing Rocq dev version');
+    // Pin dev packages from git repositories
+    await opamPin('rocq-runtime.dev', 'git+https://github.com/rocq-prover/rocq.git');
+    await opamPin('rocq-core.dev', 'git+https://github.com/rocq-prover/rocq.git');
+    await opamPin('coq-core.dev', 'git+https://github.com/rocq-prover/rocq.git');
+    await opamPin('coq-stdlib.dev', 'git+https://github.com/rocq-prover/stdlib.git');
+    await opamPin('coq.dev', '--dev-repo');
+    // Install the pinned packages
+    await opamInstall('coq.dev', ['--unset-root']);
+}
+async function installRocqLatest() {
+    coreExports.info('Installing latest Rocq version');
+    await opamInstall('coq', ['--unset-root']);
+}
+async function installRocqVersion(version) {
+    coreExports.info(`Installing Rocq version ${version}`);
+    await opamInstall(`coq.${version}`, ['--unset-root']);
+}
+async function installRocq(version) {
+    await coreExports.group('Installing Rocq', async () => {
+        if (version === 'dev') {
+            await installRocqDev();
+        }
+        else if (version === 'latest') {
+            await installRocqLatest();
+        }
+        else {
+            await installRocqVersion(version);
+        }
+    });
 }
 
 const MANDATORY_LINUX_PACKAGES = [
