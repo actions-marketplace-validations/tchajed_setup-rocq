@@ -211,77 +211,58 @@ export async function disableDuneCache(): Promise<void> {
   })
 }
 
+async function opamInstall(
+  pkg: string,
+  options: string[] = []
+): Promise<void> {
+  await exec.exec('opam', ['install', pkg, '--unset-root', '--yes', ...options])
+}
+
+async function opamPin(
+  pkg: string,
+  target: string,
+  options: string[] = []
+): Promise<void> {
+  await exec.exec('opam', [
+    'pin',
+    'add',
+    '-n',
+    '-y',
+    pkg,
+    target,
+    '--yes',
+    ...options
+  ])
+}
+
 async function installRocqDev(): Promise<void> {
   core.info('Installing Rocq dev version')
 
   // Pin dev packages from git repositories
-  await exec.exec('opam', [
-    'pin',
-    'add',
-    '-n',
-    '-y',
+  await opamPin(
     'rocq-runtime.dev',
-    'git+https://github.com/rocq-prover/rocq.git',
-    '--yes'
-  ])
-
-  await exec.exec('opam', [
-    'pin',
-    'add',
-    '-n',
-    '-y',
-    'rocq-core.dev',
-    'git+https://github.com/rocq-prover/rocq.git',
-    '--yes'
-  ])
-
-  await exec.exec('opam', [
-    'pin',
-    'add',
-    '-n',
-    '-y',
-    'coq-core.dev',
-    'git+https://github.com/rocq-prover/rocq.git',
-    '--yes'
-  ])
-
-  await exec.exec('opam', [
-    'pin',
-    'add',
-    '-n',
-    '-y',
+    'git+https://github.com/rocq-prover/rocq.git'
+  )
+  await opamPin('rocq-core.dev', 'git+https://github.com/rocq-prover/rocq.git')
+  await opamPin('coq-core.dev', 'git+https://github.com/rocq-prover/rocq.git')
+  await opamPin(
     'coq-stdlib.dev',
-    'git+https://github.com/rocq-prover/stdlib.git',
-    '--yes'
-  ])
-
-  await exec.exec('opam', [
-    'pin',
-    'add',
-    '-n',
-    '-y',
-    'coq.dev',
-    '--dev-repo',
-    '--yes'
-  ])
+    'git+https://github.com/rocq-prover/stdlib.git'
+  )
+  await opamPin('coq.dev', '--dev-repo')
 
   // Install the pinned packages
-  await exec.exec('opam', ['install', 'coq.dev', '--unset-root', '--yes'])
+  await opamInstall('coq.dev')
 }
 
 async function installRocqLatest(): Promise<void> {
   core.info('Installing latest Rocq version')
-  await exec.exec('opam', ['install', 'coq', '--unset-root', '--yes'])
+  await opamInstall('coq')
 }
 
 async function installRocqVersion(version: string): Promise<void> {
   core.info(`Installing Rocq version ${version}`)
-  await exec.exec('opam', [
-    'install',
-    `coq.${version}`,
-    '--unset-root',
-    '--yes'
-  ])
+  await opamInstall(`coq.${version}`)
 }
 
 export async function installRocq(version: string): Promise<void> {
