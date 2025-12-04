@@ -49,10 +49,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        id: checkout
-        uses: actions/checkout@v6
-
+      - uses: actions/checkout@v6
       - name: Run local action
         id: test-action
         uses: ./
@@ -61,4 +58,18 @@ jobs:
           echo "opam: $(opam --version)"
           echo "ocamlc: $(ocamlc --version)"
           echo "dune: $(dune --version)"
-          # echo "rocq: $(rocq --print-version)"
+          echo "rocq: $(rocq --print-version)"
+  test-action-dev:
+    name: GitHub Actions Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run local action
+        id: test-action
+        uses: ./
+        with:
+          rocq-version: 'dev'
+      - name: Test installed tools
+        run: |
+          echo "rocq: $(rocq --print-version)"
