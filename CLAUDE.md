@@ -27,9 +27,12 @@ environment for building Rocq projects.
 - `npm run format:check` - Check formatting without changes
 - `npm run lint` - Run ESLint
 
-**CRITICAL**: The `dist/` directory contains transpiled JavaScript and MUST be
-updated via `npm run package` after any changes to `src/`. The CI workflow
-verifies `dist/` is up-to-date.
+**CRITICAL**:
+
+- Always run `npm run format:write` after making code changes
+- The `dist/` directory contains transpiled JavaScript and MUST be updated via
+  `npm run package` after any changes to `src/`. The CI workflow verifies
+  `dist/` is up-to-date.
 
 ## Architecture
 
@@ -39,17 +42,23 @@ The action follows this sequence (see `src/main.ts:run()`):
 
 1. **Cache Restoration** (`cache.ts:restoreCache()`) - Attempts to restore opam
    cache
-2. **Opam Setup** (`opam.ts:setupOpam()`) - ALWAYS runs, even on cache hit
+2. **System Package Installation** (`unix.ts:installSystemPackages()`) -
+   Installs required system packages
+   - Linux: Disables mandb updates, installs mandatory and optional packages
+   - macOS: Installs packages via brew
+3. **Opam Setup** (`opam.ts:setupOpam()`) - ALWAYS runs, even on cache hit
    - Acquires opam binary (downloads or uses cached)
    - Initializes opam with `--disable-sandboxing`
-3. **Repository Setup** (`opam.ts:setupRepositories()`) - Configures opam repos
+4. **Repository Setup** (`opam.ts:setupRepositories()`) - Configures opam repos
    - Always adds `rocq-released` repository
    - Parses YAML input for additional repos
-4. **OCaml Installation** (`opam.ts:createSwitch()`) - Only if cache miss
-   - Creates switch with OCaml 5.2.0
-5. **Environment Setup** (`opam.ts:setupOpamEnv()`) - Sets PATH and env vars
-6. **Dune Cache Disable** (`opam.ts:disableDuneCache()`) - Writes dune config
-7. **Post-Action** (`post.ts`) - Saves cache if not restored
+5. **OCaml Installation** (`opam.ts:createSwitch()`) - Only if cache miss
+   - Creates switch with OCaml 5.4.0
+6. **Environment Setup** (`opam.ts:setupOpamEnv()`) - Sets PATH and env vars
+7. **Dune Cache Disable** (`opam.ts:disableDuneCache()`) - Writes dune config
+8. **Rocq Installation** (`opam.ts:installRocq()`) - Installs Rocq based on
+   version
+9. **Post-Action** (`post.ts`) - Saves cache if not restored
 
 ### Module Responsibilities
 
@@ -84,6 +93,16 @@ The action follows this sequence (see `src/main.ts:run()`):
 **src/post.ts**
 
 - Post-action entry point that calls `saveCache()`
+
+**src/unix.ts**
+
+- System package installation following setup-ocaml patterns
+- `installSystemPackages()`: Installs required system packages based on platform
+- Linux: Disables mandb updates, installs mandatory packages (bubblewrap,
+  musl-tools, rsync, libgmp-dev, pkg-config) and optional packages when
+  available
+- macOS: Installs darcs and mercurial via brew
+- `isPackageInstallable()`: Checks apt-cache for package availability
 
 ### Key Design Patterns
 
