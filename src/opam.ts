@@ -6,7 +6,6 @@ import * as os from 'os'
 import * as yaml from 'yaml'
 import {
   OCAML_VERSION,
-  OPAM_DISABLE_SANDBOXING,
   ARCHITECTURE,
   IS_WINDOWS,
   IS_MACOS
@@ -100,10 +99,6 @@ export async function initializeOpam(): Promise<void> {
       '--enable-shell-hook'
     ]
 
-    if (OPAM_DISABLE_SANDBOXING) {
-      core.info('Sandboxing is disabled')
-    }
-
     await exec.exec('opam', args)
   })
 }
@@ -126,17 +121,16 @@ export async function createSwitch(): Promise<void> {
   })
 }
 
+// Set environment variables specified by `opam env`
 export async function setupOpamEnv(): Promise<void> {
   let output = ''
-  const options = {
+  await exec.exec('opam', ['env'], {
     listeners: {
       stdout: (data: Buffer) => {
         output += data.toString()
       }
     }
-  }
-
-  await exec.exec('opam', ['env'], options)
+  })
 
   // Parse the output and set environment variables
   const lines = output.split('\n')

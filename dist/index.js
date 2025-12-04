@@ -83389,9 +83389,6 @@ async function initializeOpam() {
             '--auto-setup',
             '--enable-shell-hook'
         ];
-        {
-            coreExports.info('Sandboxing is disabled');
-        }
         await execExports.exec('opam', args);
     });
 }
@@ -83411,16 +83408,16 @@ async function createSwitch() {
         ]);
     });
 }
+// Set environment variables specified by `opam env`
 async function setupOpamEnv() {
     let output = '';
-    const options = {
+    await execExports.exec('opam', ['env'], {
         listeners: {
             stdout: (data) => {
                 output += data.toString();
             }
         }
-    };
-    await execExports.exec('opam', ['env'], options);
+    });
     // Parse the output and set environment variables
     const lines = output.split('\n');
     for (const line of lines) {
