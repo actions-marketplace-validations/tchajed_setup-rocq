@@ -34,7 +34,7 @@ async function cloneOrUpdateRepo(
   } catch {
     // Repository doesn't exist, clone it
     core.info(`Cloning ${repoUrl} to ${repoPath}`)
-    await exec.exec('git', ['clone', repoUrl, repoPath])
+    await exec.exec('git', ['clone', '--no-checkout', repoUrl, repoPath])
   }
 }
 
@@ -79,8 +79,8 @@ async function getMondayCommitHash(repoPath: string): Promise<string> {
     throw new Error(`No commit found before ${cutoffDate}`)
   }
 
-  // Get commit info (date and message)
-  const infoResult = await exec.getExecOutput('git', [
+  // Show commit info (date and message)
+  await exec.exec('git', [
     '-C',
     repoPath,
     'log',
@@ -88,11 +88,6 @@ async function getMondayCommitHash(repoPath: string): Promise<string> {
     commitHash,
     '--format=%ci - %s',
   ])
-
-  const commitInfo = infoResult.stdout.trim()
-
-  core.info(`Found commit: ${commitHash}`)
-  core.info(`  ${commitInfo}`)
   return commitHash
 }
 

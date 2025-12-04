@@ -92200,7 +92200,7 @@ async function cloneOrUpdateRepo(repoUrl, repoPath) {
     catch {
         // Repository doesn't exist, clone it
         coreExports.info(`Cloning ${repoUrl} to ${repoPath}`);
-        await execExports.exec('git', ['clone', repoUrl, repoPath]);
+        await execExports.exec('git', ['clone', '--no-checkout', repoUrl, repoPath]);
     }
 }
 // Get the most recent commit before Monday midnight Central Time
@@ -92235,8 +92235,8 @@ async function getMondayCommitHash(repoPath) {
     if (!commitHash) {
         throw new Error(`No commit found before ${cutoffDate}`);
     }
-    // Get commit info (date and message)
-    const infoResult = await execExports.getExecOutput('git', [
+    // Show commit info (date and message)
+    await execExports.exec('git', [
         '-C',
         repoPath,
         'log',
@@ -92244,9 +92244,6 @@ async function getMondayCommitHash(repoPath) {
         commitHash,
         '--format=%ci - %s',
     ]);
-    const commitInfo = infoResult.stdout.trim();
-    coreExports.info(`Found commit: ${commitHash}`);
-    coreExports.info(`  ${commitInfo}`);
     return commitHash;
 }
 async function installRocqWeekly() {
