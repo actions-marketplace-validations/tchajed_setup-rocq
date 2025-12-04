@@ -3,7 +3,7 @@
 #
 # For more information, see the super-linter repository:
 #     https://github.com/super-linter/super-linter
-name: Lint Codebase
+name: lint
 
 on:
   pull_request:
@@ -20,7 +20,6 @@ permissions:
 
 jobs:
   lint:
-    name: Lint Codebase
     runs-on: ubuntu-latest
 
     steps:
