@@ -7,7 +7,8 @@ const MANDATORY_LINUX_PACKAGES = [
   'musl-tools',
   'rsync',
   'libgmp-dev',
-  'pkg-config'
+  'pkg-config',
+  'sqlite3'
 ]
 
 const MACOS_PACKAGES = ['darcs', 'mercurial']
