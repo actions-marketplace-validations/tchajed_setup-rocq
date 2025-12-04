@@ -2,7 +2,7 @@ import * as core from '@actions/core'
 import * as cache from '@actions/cache'
 import * as path from 'path'
 import * as os from 'os'
-import { PLATFORM, ARCHITECTURE, ROCQ_VERSION } from './constants.js'
+import { PLATFORM, ARCHITECTURE, ROCQ_VERSION, IS_LINUX } from './constants.js'
 import { opamClean } from './opam.js'
 import { getRocqWeeklyDir } from './rocq.js'
 
@@ -22,6 +22,12 @@ function getCachePaths(): string[] {
   // For weekly version, also cache the directory with cloned repositories
   if (ROCQ_VERSION === 'weekly') {
     paths.push(getRocqWeeklyDir())
+  }
+
+  // On Linux, cache apt package archives and lists
+  if (IS_LINUX) {
+    paths.push('/var/cache/apt/archives')
+    paths.push('/var/lib/apt/lists')
   }
 
   return paths

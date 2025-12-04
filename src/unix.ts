@@ -3,8 +3,10 @@ import * as exec from '@actions/exec'
 import { IS_LINUX, IS_MACOS } from './constants.js'
 
 const MANDATORY_LINUX_PACKAGES = [
+  // NOTE: sandboxing is disabled so we don't need to install bubblewrap
   // 'bubblewrap',
-  'musl-tools',
+  // NOTE: not sure why setup-ocaml installs musl-tools
+  // 'musl-tools',
   'rsync',
   'libgmp-dev',
   'pkg-config',

@@ -92316,6 +92316,11 @@ function getCachePaths() {
     if (ROCQ_VERSION === 'weekly') {
         paths.push(getRocqWeeklyDir());
     }
+    // On Linux, cache apt package archives and lists
+    if (IS_LINUX) {
+        paths.push('/var/cache/apt/archives');
+        paths.push('/var/lib/apt/lists');
+    }
     return paths;
 }
 async function restoreCache() {
@@ -92352,8 +92357,10 @@ async function restoreCache() {
 }
 
 const MANDATORY_LINUX_PACKAGES = [
+    // NOTE: sandboxing is disabled so we don't need to install bubblewrap
     // 'bubblewrap',
-    'musl-tools',
+    // NOTE: not sure why setup-ocaml installs musl-tools
+    // 'musl-tools',
     'rsync',
     'libgmp-dev',
     'pkg-config',

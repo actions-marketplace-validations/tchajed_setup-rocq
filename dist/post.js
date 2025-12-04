@@ -83704,9 +83704,10 @@ function requireCache () {
 var cacheExports = requireCache();
 
 const ROCQ_VERSION = coreExports.getInput('rocq-version');
-require$$0$3.platform();
+const PLATFORM = require$$0$3.platform();
 require$$0$3.arch();
 process.env.GITHUB_TOKEN || '';
+const IS_LINUX = PLATFORM === 'linux';
 
 var execExports = requireExec();
 
@@ -87243,6 +87244,11 @@ function getCachePaths() {
     // For weekly version, also cache the directory with cloned repositories
     if (ROCQ_VERSION === 'weekly') {
         paths.push(getRocqWeeklyDir());
+    }
+    // On Linux, cache apt package archives and lists
+    if (IS_LINUX) {
+        paths.push('/var/cache/apt/archives');
+        paths.push('/var/lib/apt/lists');
     }
     return paths;
 }
