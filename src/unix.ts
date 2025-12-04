@@ -12,29 +12,7 @@ const MANDATORY_LINUX_PACKAGES = [
 
 const MACOS_PACKAGES = ['darcs', 'mercurial']
 
-async function disableManDbAutoUpdate(): Promise<void> {
-  try {
-    await exec.exec('sudo', ['debconf-communicate'], {
-      input: Buffer.from('set man-db/auto-update false')
-    } as exec.ExecOptions)
-  } catch (error) {
-    if (error instanceof Error) {
-      core.info(error.message)
-    }
-  }
-
-  try {
-    await exec.exec('sudo', ['dpkg-reconfigure', 'man-db'])
-  } catch (error) {
-    if (error instanceof Error) {
-      core.info(error.message)
-    }
-  }
-}
-
 async function installLinuxPackages(): Promise<void> {
-  await disableManDbAutoUpdate()
-
   const packagesToInstall = [...MANDATORY_LINUX_PACKAGES]
 
   if (packagesToInstall.length > 0) {
@@ -46,7 +24,7 @@ async function installLinuxPackages(): Promise<void> {
         '-y',
         ...packagesToInstall
       ])
-    } catch (error) {
+    } catch {
       core.info(
         'Package installation failed, updating package lists and retrying'
       )

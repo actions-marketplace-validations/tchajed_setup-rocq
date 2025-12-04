@@ -83511,7 +83511,7 @@ async function installRocqDev() {
 }
 async function installRocqLatest() {
     coreExports.info('Installing latest Rocq version');
-    await opamInstall('dune');
+    // await opamInstall('dune')
     // await opamInstall('coq')
 }
 async function installRocqVersion(version) {
@@ -83540,28 +83540,7 @@ const MANDATORY_LINUX_PACKAGES = [
     'pkg-config'
 ];
 const MACOS_PACKAGES = ['darcs', 'mercurial'];
-async function disableManDbAutoUpdate() {
-    try {
-        await execExports.exec('sudo', ['debconf-communicate'], {
-            input: Buffer.from('set man-db/auto-update false')
-        });
-    }
-    catch (error) {
-        if (error instanceof Error) {
-            coreExports.info(error.message);
-        }
-    }
-    try {
-        await execExports.exec('sudo', ['dpkg-reconfigure', 'man-db']);
-    }
-    catch (error) {
-        if (error instanceof Error) {
-            coreExports.info(error.message);
-        }
-    }
-}
 async function installLinuxPackages() {
-    await disableManDbAutoUpdate();
     const packagesToInstall = [...MANDATORY_LINUX_PACKAGES];
     if (packagesToInstall.length > 0) {
         coreExports.info(`Installing packages: ${packagesToInstall.join(', ')}`);
@@ -83573,7 +83552,7 @@ async function installLinuxPackages() {
                 ...packagesToInstall
             ]);
         }
-        catch (error) {
+        catch {
             coreExports.info('Package installation failed, updating package lists and retrying');
             await execExports.exec('sudo', ['apt-get', 'update']);
             await execExports.exec('sudo', [

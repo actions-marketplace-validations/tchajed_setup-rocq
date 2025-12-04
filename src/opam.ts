@@ -259,7 +259,7 @@ async function installRocqDev(): Promise<void> {
 
 async function installRocqLatest(): Promise<void> {
   core.info('Installing latest Rocq version')
-  await opamInstall('dune')
+  // await opamInstall('dune')
   // await opamInstall('coq')
 }
 
