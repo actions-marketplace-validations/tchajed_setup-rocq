@@ -53,6 +53,10 @@ jobs:
         id: checkout
         uses: actions/checkout@v6
 
-      - name: Test Local Action
+      - name: Run local action
         id: test-action
         uses: ./
+      - name: Test installed tools
+        run: |
+          echo "opam: $(opam --version)"
+          echo "ocamlc: $(ocamlc --version)"

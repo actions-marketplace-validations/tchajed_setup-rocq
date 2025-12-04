@@ -81,7 +81,13 @@ export async function initializeOpam(): Promise<void> {
     core.exportVariable('OPAMCONFIRMLEVEL', 'unsafe-yes')
     core.exportVariable('OPAMROOTISOK', 'true')
 
-    const args = ['init', '--bare', '--disable-sandboxing']
+    const args = [
+      'init',
+      '--bare',
+      '--disable-sandboxing',
+      '--auto-setup',
+      '--enable-shell-hook'
+    ]
 
     if (OPAM_DISABLE_SANDBOXING) {
       core.info('Sandboxing is disabled')
