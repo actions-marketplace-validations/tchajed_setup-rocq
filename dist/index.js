@@ -92202,6 +92202,11 @@ async function installRocq(version) {
         }
     });
 }
+async function opamList() {
+    await coreExports.group('installed opam packages', async () => {
+        await execExports.exec('opam', ['list', '--installed']);
+    });
+}
 
 const CACHE_VERSION = 'v1';
 function getCacheKey() {
@@ -92314,9 +92319,7 @@ async function run() {
             coreExports.info('Restored from cache');
         }
         await setupOpamEnv();
-        coreExports.group('list installed opam packages', async () => {
-            await execExports.exec('opam', ['list']);
-        });
+        await opamList();
         // Install Rocq
         await installRocq(ROCQ_VERSION());
         coreExports.info('Rocq development environment set up successfully');

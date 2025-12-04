@@ -264,6 +264,12 @@ export async function installRocq(version: string): Promise<void> {
   })
 }
 
+export async function opamList(): Promise<void> {
+  await core.group('installed opam packages', async () => {
+    await exec.exec('opam', ['list', '--installed'])
+  })
+}
+
 export async function opamClean(): Promise<void> {
   await exec.exec('opam', ['clean', '--logs', '--switch-cleanup'])
 }

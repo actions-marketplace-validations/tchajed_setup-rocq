@@ -16,12 +16,14 @@ const mockSetupRepositories = jest.fn<() => Promise<void>>()
 const mockCreateSwitch = jest.fn<() => Promise<void>>()
 const mockSetupOpamEnv = jest.fn<() => Promise<void>>()
 const mockInstallRocq = jest.fn<(version: string) => Promise<void>>()
+const mockOpamList = jest.fn<() => Promise<void>>()
 const mockOpam = {
   setupOpam: mockSetupOpam,
   setupRepositories: mockSetupRepositories,
   createSwitch: mockCreateSwitch,
   setupOpamEnv: mockSetupOpamEnv,
-  installRocq: mockInstallRocq
+  installRocq: mockInstallRocq,
+  opamList: mockOpamList
 }
 
 // Mock unix module
@@ -46,14 +48,12 @@ describe('main.ts', () => {
       if (name === 'rocq-version') return 'latest'
       return ''
     })
-    core.group.mockImplementation((name: string, fn: () => Promise<void>) =>
-      fn()
-    )
 
     // Mock all functions to succeed by default
     mockRestoreCache.mockResolvedValue(false)
     mockInstallSystemPackages.mockResolvedValue(undefined)
     mockSetupOpam.mockResolvedValue(undefined)
+    mockOpamList.mockResolvedValue(undefined)
     mockSetupRepositories.mockResolvedValue(undefined)
     mockCreateSwitch.mockResolvedValue(undefined)
     mockSetupOpamEnv.mockResolvedValue(undefined)
