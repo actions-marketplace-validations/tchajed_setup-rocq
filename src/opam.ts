@@ -174,6 +174,10 @@ export async function setupRepositories(): Promise<void> {
       'rocq-released',
       'https://rocq-prover.org/opam/released'
     )
+    await addRepository(
+      'rocq-core-dev',
+      'https://rocq-prover.github.io/opam/core-dev'
+    )
 
     // Add any additional repositories from input
     const opamReposInput = core.getInput('opam-repositories')
