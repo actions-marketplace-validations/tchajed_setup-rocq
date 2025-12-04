@@ -65,7 +65,7 @@ The action follows this sequence (see `src/main.ts:run()`):
 
 **src/constants.ts**
 - Platform detection (IS_WINDOWS, IS_MACOS, IS_LINUX)
-- Fixed OCaml version (5.2.0)
+- Fixed OCaml version (5.4.0)
 - Configuration flags
 
 **src/post.ts**

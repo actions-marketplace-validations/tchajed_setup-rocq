@@ -155,7 +155,7 @@ export async function addRepository(name: string, url: string): Promise<void> {
   await exec.exec('opam', [
     'repository',
     'add',
-    'all-switches',
+    '--all-switches',
     '--set-default',
     name,
     url,

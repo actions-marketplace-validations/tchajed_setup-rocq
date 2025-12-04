@@ -74981,7 +74981,7 @@ function requireCache () {
 
 var cacheExports = requireCache();
 
-const OCAML_VERSION = '5.2.0';
+const OCAML_VERSION = '5.4.0';
 const PLATFORM = require$$0$3.platform();
 const ARCHITECTURE = require$$0$3.arch();
 process.env.GITHUB_TOKEN || '';
@@ -83435,7 +83435,7 @@ async function addRepository(name, url) {
     await execExports.exec('opam', [
         'repository',
         'add',
-        'all-switches',
+        '--all-switches',
         '--set-default',
         name,
         url,
