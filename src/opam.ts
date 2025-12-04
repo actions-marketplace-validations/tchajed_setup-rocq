@@ -6,12 +6,11 @@ import * as os from 'os'
 import * as yaml from 'yaml'
 import {
   OCAML_VERSION,
+  OPAM_VERSION,
   ARCHITECTURE,
   IS_WINDOWS,
   IS_MACOS
 } from './constants.js'
-
-const OPAM_VERSION = '2.5.0'
 
 function getOpamUrl(): string {
   if (IS_WINDOWS) {
@@ -115,8 +114,7 @@ export async function createSwitch(): Promise<void> {
       'switch',
       'create',
       'default',
-      `ocaml-base-compiler.${OCAML_VERSION}`,
-      '--yes'
+      `ocaml-base-compiler.${OCAML_VERSION}`
     ])
   })
 }
@@ -162,8 +160,7 @@ export async function addRepository(name: string, url: string): Promise<void> {
     '--all-switches',
     '--set-default',
     name,
-    url,
-    '--yes'
+    url
   ])
 }
 
@@ -200,13 +197,7 @@ export async function setupRepositories(): Promise<void> {
 }
 
 async function opamInstall(pkg: string, options: string[] = []): Promise<void> {
-  await exec.exec('opam', [
-    'install',
-    pkg,
-    // '--unset-root',
-    '--yes',
-    ...options
-  ])
+  await exec.exec('opam', ['install', pkg, '--unset-root', ...options])
 }
 
 async function opamPin(
@@ -218,7 +209,6 @@ async function opamPin(
     'pin',
     'add',
     '--no-action',
-    '--yes',
     pkg,
     target,
     ...options

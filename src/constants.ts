@@ -2,6 +2,8 @@ import * as os from 'os'
 
 export const OCAML_VERSION = '5.4.0'
 
+export const OPAM_VERSION = '2.5.0'
+
 export const PLATFORM = os.platform()
 
 export const ARCHITECTURE = os.arch()
