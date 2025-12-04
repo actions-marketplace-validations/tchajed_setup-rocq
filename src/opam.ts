@@ -175,7 +175,7 @@ export async function setupRepositories(): Promise<void> {
       'rocq-released',
       'https://rocq-prover.org/opam/released',
     )
-    if (ROCQ_VERSION() == 'dev') {
+    if (ROCQ_VERSION == 'dev' || ROCQ_VERSION == 'weekly') {
       await addRepository(
         'rocq-core-dev',
         'https://rocq-prover.github.io/opam/core-dev',
@@ -229,7 +229,7 @@ export async function opamPin(
 }
 
 export async function opamList(): Promise<void> {
-  await core.group('installed opam packages', async () => {
+  await core.group('List installed opam packages', async () => {
     await exec.exec('opam', ['list', '--installed'])
   })
 }

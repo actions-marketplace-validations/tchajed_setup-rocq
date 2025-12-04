@@ -53,8 +53,8 @@ jobs:
           echo "ocamlc: $(ocamlc --version)"
           echo "dune: $(dune --version)"
           echo "rocq: $(rocq --print-version)"
-  test-action-dev:
-    name: Run action (dev)
+  test-action-weekly:
+    name: Run action (rocq weekly)
     runs-on: ubuntu-latest
 
     steps:
@@ -63,7 +63,7 @@ jobs:
         id: test-action
         uses: ./
         with:
-          rocq-version: 'dev'
+          rocq-version: 'weekly'
       - name: Test installed tools
         run: |
           echo "rocq: $(rocq --print-version)"

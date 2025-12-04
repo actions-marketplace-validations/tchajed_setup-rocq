@@ -4,29 +4,39 @@ import * as path from 'path'
 import * as os from 'os'
 import { PLATFORM, ARCHITECTURE, ROCQ_VERSION } from './constants.js'
 import { opamClean } from './opam.js'
+import { getRocqWeeklyDir } from './rocq.js'
 
 export const CACHE_VERSION = 'v1'
 
 function getCacheKey(): string {
-  return `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}-rocq-${ROCQ_VERSION()}`
+  return `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}-rocq-${ROCQ_VERSION}`
 }
 
 function getOpamRoot(): string {
   return path.join(os.homedir(), '.opam')
 }
 
+function getCachePaths(): string[] {
+  const paths = [getOpamRoot()]
+
+  // For weekly version, also cache the directory with cloned repositories
+  if (ROCQ_VERSION === 'weekly') {
+    paths.push(getRocqWeeklyDir())
+  }
+
+  return paths
+}
+
 export async function restoreCache(): Promise<boolean> {
-  const opamRoot = getOpamRoot()
+  const cachePaths = getCachePaths()
   const cacheKey = getCacheKey()
 
   core.info(`Attempting to restore cache with key: ${cacheKey}`)
-  core.info(`Cache paths: ${opamRoot}`)
+  core.info(`Cache paths: ${cachePaths.join(', ')}`)
 
   try {
-    const restoredKey = await cache.restoreCache([opamRoot], cacheKey, [
+    const restoredKey = await cache.restoreCache(cachePaths, cacheKey, [
       `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}-`,
-      `setup-rocq-${CACHE_VERSION}-${PLATFORM}-`,
-      `setup-rocq-${CACHE_VERSION}-`,
     ])
 
     if (restoredKey) {
@@ -60,13 +70,13 @@ export async function saveCache(): Promise<void> {
   }
 
   await opamClean()
-  const opamRoot = getOpamRoot()
+  const cachePaths = getCachePaths()
 
   core.info(`Saving cache with key: ${cacheKey}`)
-  core.info(`Cache paths: ${opamRoot}`)
+  core.info(`Cache paths: ${cachePaths.join(', ')}`)
 
   try {
-    await cache.saveCache([opamRoot], cacheKey)
+    await cache.saveCache(cachePaths, cacheKey)
     core.info('Cache saved successfully')
   } catch (error) {
     if (error instanceof Error) {

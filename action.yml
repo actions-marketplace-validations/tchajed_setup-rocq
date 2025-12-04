@@ -10,7 +10,9 @@ branding:
 # Define your inputs here.
 inputs:
   rocq-version:
-    description: The version of Rocq to install
+    description:
+      'The version of Rocq to install (latest, weekly, dev, or full version like
+      9.1.0)'
     default: 'latest'
   opam-repositories:
     description: 'Additional opam repositories to add (YAML name:url object)'

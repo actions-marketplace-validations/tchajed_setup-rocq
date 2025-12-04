@@ -83706,9 +83706,7 @@ var cacheExports = requireCache();
 
 const OCAML_VERSION = '5.4.0';
 const OPAM_VERSION = '2.5.0';
-const ROCQ_VERSION = () => {
-    return coreExports.getInput('rocq-version');
-};
+const ROCQ_VERSION = coreExports.getInput('rocq-version');
 const PLATFORM = require$$0$3.platform();
 const ARCHITECTURE = require$$0$3.arch();
 process.env.GITHUB_TOKEN || '';
@@ -92138,7 +92136,7 @@ async function setupRepositories() {
     await coreExports.group('Setting up opam repositories', async () => {
         // Always add rocq-released repository
         await addRepository('rocq-released', 'https://rocq-prover.org/opam/released');
-        if (ROCQ_VERSION() == 'dev') {
+        if (ROCQ_VERSION == 'dev' || ROCQ_VERSION == 'weekly') {
             await addRepository('rocq-core-dev', 'https://rocq-prover.github.io/opam/core-dev');
         }
         // Add any additional repositories from input
@@ -92173,53 +92171,93 @@ async function opamPin(pkg, target, options = []) {
     ]);
 }
 async function opamList() {
-    await coreExports.group('installed opam packages', async () => {
+    await coreExports.group('List installed opam packages', async () => {
         await execExports.exec('opam', ['list', '--installed']);
     });
 }
 
-const CACHE_VERSION = 'v1';
-function getCacheKey() {
-    return `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}-rocq-${ROCQ_VERSION()}`;
+// Get the directory containing weekly rocq clones
+function getRocqWeeklyDir() {
+    return require$$1$1.join(require$$0$3.homedir(), 'rocq-weekly');
 }
-function getOpamRoot() {
-    return require$$1$1.join(require$$0$3.homedir(), '.opam');
+// Get the path to the rocq repository
+function getRocqRepoPath() {
+    return require$$1$1.join(getRocqWeeklyDir(), 'rocq');
 }
-async function restoreCache() {
-    const opamRoot = getOpamRoot();
-    const cacheKey = getCacheKey();
-    coreExports.info(`Attempting to restore cache with key: ${cacheKey}`);
-    coreExports.info(`Cache paths: ${opamRoot}`);
+// Get the path to the stdlib repository
+function getStdlibRepoPath() {
+    return require$$1$1.join(getRocqWeeklyDir(), 'stdlib');
+}
+// Clone or update a git repository
+async function cloneOrUpdateRepo(repoUrl, repoPath) {
+    const fs = await import('fs/promises');
     try {
-        const restoredKey = await cacheExports.restoreCache([opamRoot], cacheKey, [
-            `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}-`,
-            `setup-rocq-${CACHE_VERSION}-${PLATFORM}-`,
-            `setup-rocq-${CACHE_VERSION}-`,
-        ]);
-        if (restoredKey) {
-            coreExports.info(`Cache restored from key: ${restoredKey}`);
-            // Set a state variable to indicate cache was restored
-            coreExports.saveState('CACHE_RESTORED', 'true');
-            coreExports.saveState('CACHE_KEY', cacheKey);
-            return true;
-        }
-        else {
-            coreExports.info('Cache not found');
-            coreExports.saveState('CACHE_RESTORED', 'false');
-            coreExports.saveState('CACHE_KEY', cacheKey);
-            return false;
-        }
+        await fs.access(repoPath);
+        // Repository exists, update it
+        coreExports.info(`Updating repository at ${repoPath}`);
+        await execExports.exec('git', ['-C', repoPath, 'fetch', 'origin']);
+        await execExports.exec('git', ['-C', repoPath, 'reset', '--hard', 'origin/main']);
     }
-    catch (error) {
-        if (error instanceof Error) {
-            coreExports.warning(`Failed to restore cache: ${error.message}`);
-        }
-        coreExports.saveState('CACHE_RESTORED', 'false');
-        coreExports.saveState('CACHE_KEY', cacheKey);
-        return false;
+    catch {
+        // Repository doesn't exist, clone it
+        coreExports.info(`Cloning ${repoUrl} to ${repoPath}`);
+        await execExports.exec('git', ['clone', repoUrl, repoPath]);
     }
 }
-
+// Get the most recent commit before Monday midnight Central Time
+async function getMondayCommitHash(repoPath) {
+    // Get current date/time
+    const now = new Date();
+    // Calculate this Monday midnight Central Time
+    const dayOfWeek = now.getUTCDay(); // 0 = Sunday, 1 = Monday, etc.
+    const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const thisMonday = new Date(now);
+    thisMonday.setUTCDate(now.getUTCDate() + daysToMonday);
+    // Set to midnight Central Time (UTC-6 in standard time, UTC-5 in daylight time)
+    // To be safe, we'll use UTC-6 and set to 06:00 UTC which is midnight CT
+    thisMonday.setUTCHours(6, 0, 0, 0);
+    // If thisMonday is in the future, go back one week
+    if (thisMonday > now) {
+        thisMonday.setUTCDate(thisMonday.getUTCDate() - 7);
+    }
+    const cutoffDate = thisMonday.toISOString();
+    coreExports.info(`Finding commit before Monday midnight CT: ${cutoffDate}`);
+    // Get the commit hash
+    let commitHash = '';
+    await execExports.exec('git', ['-C', repoPath, 'log', '-1', '--before', cutoffDate, '--format=%H'], {
+        listeners: {
+            stdout: (data) => {
+                commitHash += data.toString().trim();
+            },
+        },
+    });
+    if (!commitHash) {
+        throw new Error(`No commit found before ${cutoffDate}`);
+    }
+    coreExports.info(`Found commit: ${commitHash}`);
+    return commitHash;
+}
+async function installRocqWeekly() {
+    coreExports.info('Installing Rocq weekly version');
+    const rocqRepoPath = getRocqRepoPath();
+    const stdlibRepoPath = getStdlibRepoPath();
+    // Clone or update repositories
+    await cloneOrUpdateRepo('https://github.com/rocq-prover/rocq', rocqRepoPath);
+    await cloneOrUpdateRepo('https://github.com/rocq-prover/stdlib', stdlibRepoPath);
+    // Get commit hashes for Monday midnight
+    const rocqCommit = await getMondayCommitHash(rocqRepoPath);
+    const stdlibCommit = await getMondayCommitHash(stdlibRepoPath);
+    coreExports.info(`Using rocq commit: ${rocqCommit}`);
+    coreExports.info(`Using stdlib commit: ${stdlibCommit}`);
+    // Pin dev packages to specific commits
+    await opamPin('rocq-runtime.dev', `git+file://${rocqRepoPath}#${rocqCommit}`);
+    await opamPin('rocq-core.dev', `git+file://${rocqRepoPath}#${rocqCommit}`);
+    await opamPin('coq-core.dev', `git+file://${rocqRepoPath}#${rocqCommit}`);
+    await opamPin('coq-stdlib.dev', `git+file://${stdlibRepoPath}#${stdlibCommit}`);
+    await opamPin('coq.dev', '--dev-repo');
+    // Install the pinned packages
+    await opamInstall('coq.dev', ['--unset-root']);
+}
 async function installRocqDev() {
     coreExports.info('Installing Rocq dev version');
     // Pin dev packages from git repositories
@@ -92244,6 +92282,9 @@ async function installRocq(version) {
         if (version === 'dev') {
             await installRocqDev();
         }
+        else if (version === 'weekly') {
+            await installRocqWeekly();
+        }
         else if (version === 'latest') {
             await installRocqLatest();
         }
@@ -92251,6 +92292,54 @@ async function installRocq(version) {
             await installRocqVersion(version);
         }
     });
+}
+
+const CACHE_VERSION = 'v1';
+function getCacheKey() {
+    return `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}-rocq-${ROCQ_VERSION}`;
+}
+function getOpamRoot() {
+    return require$$1$1.join(require$$0$3.homedir(), '.opam');
+}
+function getCachePaths() {
+    const paths = [getOpamRoot()];
+    // For weekly version, also cache the directory with cloned repositories
+    if (ROCQ_VERSION === 'weekly') {
+        paths.push(getRocqWeeklyDir());
+    }
+    return paths;
+}
+async function restoreCache() {
+    const cachePaths = getCachePaths();
+    const cacheKey = getCacheKey();
+    coreExports.info(`Attempting to restore cache with key: ${cacheKey}`);
+    coreExports.info(`Cache paths: ${cachePaths.join(', ')}`);
+    try {
+        const restoredKey = await cacheExports.restoreCache(cachePaths, cacheKey, [
+            `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}-`,
+        ]);
+        if (restoredKey) {
+            coreExports.info(`Cache restored from key: ${restoredKey}`);
+            // Set a state variable to indicate cache was restored
+            coreExports.saveState('CACHE_RESTORED', 'true');
+            coreExports.saveState('CACHE_KEY', cacheKey);
+            return true;
+        }
+        else {
+            coreExports.info('Cache not found');
+            coreExports.saveState('CACHE_RESTORED', 'false');
+            coreExports.saveState('CACHE_KEY', cacheKey);
+            return false;
+        }
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            coreExports.warning(`Failed to restore cache: ${error.message}`);
+        }
+        coreExports.saveState('CACHE_RESTORED', 'false');
+        coreExports.saveState('CACHE_KEY', cacheKey);
+        return false;
+    }
 }
 
 const MANDATORY_LINUX_PACKAGES = [
@@ -92324,7 +92413,7 @@ async function run() {
         await setupOpamEnv();
         await opamList();
         // Install Rocq
-        await installRocq(ROCQ_VERSION());
+        await installRocq(ROCQ_VERSION);
         coreExports.info('Rocq development environment set up successfully');
     }
     catch (error) {

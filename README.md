@@ -9,12 +9,10 @@ GitHub action to install Rocq with opam. Supports caching of opam dependencies.
 
 ## Usage
 
-Rocq version defaults to "latest", which uses the most recent stable release.
-
 ```yaml
 - uses: tchajed/setup-rocq@v1
   with:
-    rocq-version: 'latest'
+    rocq-version: 'latest' # default
 ```
 
 ## Configuration
@@ -25,6 +23,12 @@ Rocq version defaults to "latest", which uses the most recent stable release.
 | ------------------- | ---------------------------------------------------------- | -------- | -------- |
 | `rocq-version`      | The version of Rocq to install                             | No       | `latest` |
 | `opam-repositories` | Additional opam repositories to add (YAML name:url object) | No       | `''`     |
+
+`rocq-version` supports these special strings, in addition to full Rocq versions (as used by `opam install`):
+
+- "latest" installs the most recent stable release
+- "dev" installs the latest git version of Rocq
+- "weekly" installs the git version of Rocq from this Monday
 
 ### Examples
 

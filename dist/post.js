@@ -83703,6 +83703,7 @@ function requireCache () {
 
 var cacheExports = requireCache();
 
+const ROCQ_VERSION = coreExports.getInput('rocq-version');
 require$$0$3.platform();
 require$$0$3.arch();
 process.env.GITHUB_TOKEN || '';
@@ -87229,8 +87230,21 @@ async function opamClean() {
     await execExports.exec('opam', ['clean', '--logs', '--switch-cleanup']);
 }
 
+// Get the directory containing weekly rocq clones
+function getRocqWeeklyDir() {
+    return require$$1$1.join(require$$0$3.homedir(), 'rocq-weekly');
+}
+
 function getOpamRoot() {
     return require$$1$1.join(require$$0$3.homedir(), '.opam');
+}
+function getCachePaths() {
+    const paths = [getOpamRoot()];
+    // For weekly version, also cache the directory with cloned repositories
+    if (ROCQ_VERSION === 'weekly') {
+        paths.push(getRocqWeeklyDir());
+    }
+    return paths;
 }
 async function saveCache() {
     const cacheKey = coreExports.getState('CACHE_KEY');
@@ -87239,11 +87253,11 @@ async function saveCache() {
         return;
     }
     await opamClean();
-    const opamRoot = getOpamRoot();
+    const cachePaths = getCachePaths();
     coreExports.info(`Saving cache with key: ${cacheKey}`);
-    coreExports.info(`Cache paths: ${opamRoot}`);
+    coreExports.info(`Cache paths: ${cachePaths.join(', ')}`);
     try {
-        await cacheExports.saveCache([opamRoot], cacheKey);
+        await cacheExports.saveCache(cachePaths, cacheKey);
         coreExports.info('Cache saved successfully');
     }
     catch (error) {

@@ -43,17 +43,17 @@ jest.unstable_mockModule('../src/opam.js', () => mockOpam)
 jest.unstable_mockModule('../src/rocq.js', () => mockRocq)
 jest.unstable_mockModule('../src/unix.js', () => mockUnix)
 
+// Set the inputs before loading the module, so they can be used in constants.ts
+core.getInput.mockImplementation((name: string) => {
+  if (name === 'rocq-version') return 'latest'
+  return ''
+})
+
 // The module being tested should be imported dynamically.
 const { run } = await import('../src/main.js')
 
 describe('main.ts', () => {
   beforeEach(() => {
-    // Set the action's inputs
-    core.getInput.mockImplementation((name: string) => {
-      if (name === 'rocq-version') return 'latest'
-      return ''
-    })
-
     // Mock all functions to succeed by default
     mockRestoreCache.mockResolvedValue(false)
     mockInstallSystemPackages.mockResolvedValue(undefined)
