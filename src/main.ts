@@ -5,7 +5,6 @@ import {
   setupRepositories,
   createSwitch,
   setupOpamEnv,
-  disableDuneCache,
   installRocq
 } from './opam.js'
 import { installSystemPackages } from './unix.js'
@@ -32,8 +31,6 @@ export async function run(): Promise<void> {
       core.info('Restored from cache')
     }
     await setupOpamEnv()
-
-    await disableDuneCache()
 
     // Install Rocq
     const rocqVersion = core.getInput('rocq-version')

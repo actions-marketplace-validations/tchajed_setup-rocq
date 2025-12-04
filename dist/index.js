@@ -83368,10 +83368,20 @@ async function initializeOpam() {
     await coreExports.group('Initialising opam', async () => {
         // Set environment variables
         const opamRoot = require$$1$2.join(require$$0$3.homedir(), '.opam');
-        coreExports.exportVariable('OPAMROOT', opamRoot);
-        coreExports.exportVariable('OPAMYES', '1');
+        if (coreExports.isDebug()) {
+            coreExports.exportVariable('OPAMVERBOSE', 1);
+        }
+        coreExports.exportVariable('OPAMCOLOR', 'always');
         coreExports.exportVariable('OPAMCONFIRMLEVEL', 'unsafe-yes');
-        coreExports.exportVariable('OPAMROOTISOK', 'true');
+        coreExports.exportVariable('OPAMDOWNLOADJOBS', require$$0$3.availableParallelism());
+        coreExports.exportVariable('OPAMERRLOGLEN', 0);
+        coreExports.exportVariable('OPAMEXTERNALSOLVER', 'builtin-0install');
+        coreExports.exportVariable('OPAMPRECISETRACKING', 1);
+        coreExports.exportVariable('OPAMRETRIES', 10);
+        coreExports.exportVariable('OPAMROOT', opamRoot);
+        coreExports.exportVariable('OPAMSOLVERTIMEOUT', 600);
+        coreExports.exportVariable('OPAMYES', 1);
+        coreExports.exportVariable('OPAMROOTISOK', true);
         const args = [
             'init',
             '--bare',
@@ -83465,19 +83475,6 @@ async function setupRepositories() {
         }
     });
 }
-async function disableDuneCache() {
-    await coreExports.group('Disabling dune cache', async () => {
-        // Create a dune config file that disables caching
-        const duneConfigDir = require$$1$2.join(require$$0$3.homedir(), '.config', 'dune');
-        const duneConfigPath = require$$1$2.join(duneConfigDir, 'config');
-        // Ensure the directory exists
-        await execExports.exec('mkdir', ['-p', duneConfigDir]);
-        // Write config to disable cache
-        const fs = await import('fs/promises');
-        await fs.writeFile(duneConfigPath, '(cache disabled)\n');
-        coreExports.info('Dune cache disabled');
-    });
-}
 async function opamInstall(pkg, options = []) {
     await execExports.exec('opam', [
         'install',
@@ -83511,8 +83508,7 @@ async function installRocqDev() {
 }
 async function installRocqLatest() {
     coreExports.info('Installing latest Rocq version');
-    await opamInstall('dune');
-    // await opamInstall('coq')
+    await opamInstall('coq');
 }
 async function installRocqVersion(version) {
     coreExports.info(`Installing Rocq version ${version}`);
@@ -83600,7 +83596,6 @@ async function run() {
             coreExports.info('Restored from cache');
         }
         await setupOpamEnv();
-        await disableDuneCache();
         // Install Rocq
         const rocqVersion = coreExports.getInput('rocq-version');
         await installRocq(rocqVersion);

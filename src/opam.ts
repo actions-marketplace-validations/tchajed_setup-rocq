@@ -77,6 +77,9 @@ export async function initializeOpam(): Promise<void> {
   await core.group('Initialising opam', async () => {
     // Set environment variables
     const opamRoot = path.join(os.homedir(), '.opam')
+    if (core.isDebug()) {
+      core.exportVariable('OPAMVERBOSE', 1)
+    }
     core.exportVariable('OPAMCOLOR', 'always')
     core.exportVariable('OPAMCONFIRMLEVEL', 'unsafe-yes')
     core.exportVariable('OPAMDOWNLOADJOBS', os.availableParallelism())
@@ -87,6 +90,7 @@ export async function initializeOpam(): Promise<void> {
     core.exportVariable('OPAMROOT', opamRoot)
     core.exportVariable('OPAMSOLVERTIMEOUT', 600)
     core.exportVariable('OPAMYES', 1)
+    core.exportVariable('OPAMROOTISOK', true)
 
     const args = [
       'init',
@@ -201,22 +205,6 @@ export async function setupRepositories(): Promise<void> {
   })
 }
 
-export async function disableDuneCache(): Promise<void> {
-  await core.group('Disabling dune cache', async () => {
-    // Create a dune config file that disables caching
-    const duneConfigDir = path.join(os.homedir(), '.config', 'dune')
-    const duneConfigPath = path.join(duneConfigDir, 'config')
-
-    // Ensure the directory exists
-    await exec.exec('mkdir', ['-p', duneConfigDir])
-
-    // Write config to disable cache
-    const fs = await import('fs/promises')
-    await fs.writeFile(duneConfigPath, '(cache disabled)\n')
-    core.info('Dune cache disabled')
-  })
-}
-
 async function opamInstall(pkg: string, options: string[] = []): Promise<void> {
   await exec.exec('opam', [
     'install',
@@ -265,8 +253,7 @@ async function installRocqDev(): Promise<void> {
 
 async function installRocqLatest(): Promise<void> {
   core.info('Installing latest Rocq version')
-  await opamInstall('dune')
-  // await opamInstall('coq')
+  await opamInstall('coq')
 }
 
 async function installRocqVersion(version: string): Promise<void> {
