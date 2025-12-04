@@ -24,7 +24,8 @@ GitHub action to install Rocq with opam. Supports caching of opam dependencies.
 | `rocq-version`      | The version of Rocq to install                             | No       | `latest` |
 | `opam-repositories` | Additional opam repositories to add (YAML name:url object) | No       | `''`     |
 
-`rocq-version` supports these special strings, in addition to full Rocq versions (as used by `opam install`):
+`rocq-version` supports these special strings, in addition to full Rocq versions
+(as used by `opam install`):
 
 - "latest" installs the most recent stable release
 - "dev" installs the latest git version of Rocq
