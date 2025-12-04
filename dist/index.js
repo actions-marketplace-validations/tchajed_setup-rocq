@@ -83432,12 +83432,20 @@ async function setupOpamEnv() {
 }
 async function addRepository(name, url) {
     coreExports.info(`Adding opam repository: ${name} (${url})`);
-    await execExports.exec('opam', ['repository', 'add', name, url, '--yes']);
+    await execExports.exec('opam', [
+        'repository',
+        'add',
+        'all-switches',
+        '--set-default',
+        name,
+        url,
+        '--yes'
+    ]);
 }
 async function setupRepositories() {
     await coreExports.group('Setting up opam repositories', async () => {
         // Always add rocq-released repository
-        await addRepository('rocq-released', 'https://github.com/coq/opam-rocq-archive.git');
+        await addRepository('rocq-released', 'https://rocq-prover.org/opam/released');
         // Add any additional repositories from input
         const opamReposInput = coreExports.getInput('opam-repositories');
         if (opamReposInput) {
