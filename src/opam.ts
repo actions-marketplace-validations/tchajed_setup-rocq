@@ -10,7 +10,7 @@ import {
   OPAM_VERSION,
   ARCHITECTURE,
   IS_WINDOWS,
-  IS_MACOS
+  IS_MACOS,
 } from './constants.js'
 
 function getOpamUrl(): string {
@@ -52,7 +52,7 @@ export async function acquireOpam(): Promise<void> {
         opam,
         'opam',
         OPAM_VERSION,
-        ARCHITECTURE
+        ARCHITECTURE,
       )
 
       core.info(`Successfully cached opam to ${cachedPath}`)
@@ -100,7 +100,7 @@ export async function initializeOpam(): Promise<void> {
       '--bare',
       '--disable-sandboxing',
       '--auto-setup',
-      '--enable-shell-hook'
+      '--enable-shell-hook',
     ])
   })
 }
@@ -117,7 +117,7 @@ export async function createSwitch(): Promise<void> {
       'switch',
       'create',
       'default',
-      `ocaml-base-compiler.${OCAML_VERSION}`
+      `ocaml-base-compiler.${OCAML_VERSION}`,
     ])
   })
 }
@@ -129,8 +129,8 @@ export async function setupOpamEnv(): Promise<void> {
     listeners: {
       stdout: (data: Buffer) => {
         output += data.toString()
-      }
-    }
+      },
+    },
   })
 
   // Parse the output and set environment variables
@@ -163,7 +163,7 @@ export async function addRepository(name: string, url: string): Promise<void> {
     '--all-switches',
     '--set-default',
     name,
-    url
+    url,
   ])
 }
 
@@ -172,11 +172,11 @@ export async function setupRepositories(): Promise<void> {
     // Always add rocq-released repository
     await addRepository(
       'rocq-released',
-      'https://rocq-prover.org/opam/released'
+      'https://rocq-prover.org/opam/released',
     )
     await addRepository(
       'rocq-core-dev',
-      'https://rocq-prover.github.io/opam/core-dev'
+      'https://rocq-prover.github.io/opam/core-dev',
     )
 
     // Add any additional repositories from input
@@ -195,7 +195,7 @@ export async function setupRepositories(): Promise<void> {
       } catch (error) {
         if (error instanceof Error) {
           core.warning(
-            `Failed to parse opam-repositories as YAML: ${error.message}`
+            `Failed to parse opam-repositories as YAML: ${error.message}`,
           )
         }
       }
@@ -210,7 +210,7 @@ async function opamInstall(pkg: string, options: string[] = []): Promise<void> {
 async function opamPin(
   pkg: string,
   target: string,
-  options: string[] = []
+  options: string[] = [],
 ): Promise<void> {
   await exec.exec('opam', [
     'pin',
@@ -218,7 +218,7 @@ async function opamPin(
     '--no-action',
     pkg,
     target,
-    ...options
+    ...options,
   ])
 }
 
@@ -228,13 +228,13 @@ async function installRocqDev(): Promise<void> {
   // Pin dev packages from git repositories
   await opamPin(
     'rocq-runtime.dev',
-    'git+https://github.com/rocq-prover/rocq.git'
+    'git+https://github.com/rocq-prover/rocq.git',
   )
   await opamPin('rocq-core.dev', 'git+https://github.com/rocq-prover/rocq.git')
   await opamPin('coq-core.dev', 'git+https://github.com/rocq-prover/rocq.git')
   await opamPin(
     'coq-stdlib.dev',
-    'git+https://github.com/rocq-prover/stdlib.git'
+    'git+https://github.com/rocq-prover/stdlib.git',
   )
   await opamPin('coq.dev', '--dev-repo')
 

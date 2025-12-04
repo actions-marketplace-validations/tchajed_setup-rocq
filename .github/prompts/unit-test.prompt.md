@@ -59,7 +59,7 @@ describe('main.ts', () => {
       1,
       'time',
       // Simple regex to match a time string in the format HH:MM:SS.
-      expect.stringMatching(/^\d{2}:\d{2}:\d{2}/)
+      expect.stringMatching(/^\d{2}:\d{2}:\d{2}/),
     )
   })
 
@@ -77,7 +77,7 @@ describe('main.ts', () => {
     // Verify that the action was marked as failed.
     expect(core.setFailed).toHaveBeenNthCalledWith(
       1,
-      'milliseconds is not a number'
+      'milliseconds is not a number',
     )
   })
 })

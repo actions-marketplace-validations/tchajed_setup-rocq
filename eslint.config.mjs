@@ -13,26 +13,26 @@ import globals from 'globals'
 const compat = new FlatCompat({
   baseDirectory: import.meta.dirname,
   recommendedConfig: js.configs.recommended,
-  allConfig: js.configs.all
+  allConfig: js.configs.all,
 })
 
 export default [
   {
-    ignores: ['**/coverage', '**/dist', '**/linter', '**/node_modules']
+    ignores: ['**/coverage', '**/dist', '**/linter', '**/node_modules'],
   },
   ...compat.extends(
     'eslint:recommended',
     'plugin:@typescript-eslint/eslint-recommended',
     'plugin:@typescript-eslint/recommended',
     'plugin:jest/recommended',
-    'plugin:prettier/recommended'
+    'plugin:prettier/recommended',
   ),
   {
     plugins: {
       import: fixupPluginRules(_import),
       jest,
       prettier,
-      '@typescript-eslint': typescriptEslint
+      '@typescript-eslint': typescriptEslint,
     },
 
     languageOptions: {
@@ -40,7 +40,7 @@ export default [
         ...globals.node,
         ...globals.jest,
         Atomics: 'readonly',
-        SharedArrayBuffer: 'readonly'
+        SharedArrayBuffer: 'readonly',
       },
 
       parser: tsParser,
@@ -54,20 +54,20 @@ export default [
             '__tests__/*.ts',
             'eslint.config.mjs',
             'jest.config.js',
-            'rollup.config.ts'
-          ]
+            'rollup.config.ts',
+          ],
         },
-        tsconfigRootDir: import.meta.dirname
-      }
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
 
     settings: {
       'import/resolver': {
         typescript: {
           alwaysTryTypes: true,
-          project: 'tsconfig.json'
-        }
-      }
+          project: 'tsconfig.json',
+        },
+      },
     },
 
     rules: {
@@ -79,7 +79,7 @@ export default [
       'no-console': 'off',
       'no-shadow': 'off',
       'no-unused-vars': 'off',
-      'prettier/prettier': 'error'
-    }
-  }
+      'prettier/prettier': 'error',
+    },
+  },
 ]

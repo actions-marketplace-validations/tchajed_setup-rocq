@@ -9,7 +9,7 @@ const sharedPlugins = [
   typescript(),
   json(),
   nodeResolve({ preferBuiltins: true }),
-  commonjs()
+  commonjs(),
 ]
 
 const config = [
@@ -19,9 +19,9 @@ const config = [
       esModule: true,
       file: 'dist/index.js',
       format: 'es',
-      sourcemap: true
+      sourcemap: true,
     },
-    plugins: sharedPlugins
+    plugins: sharedPlugins,
   },
   {
     input: 'src/post.ts',
@@ -29,10 +29,10 @@ const config = [
       esModule: true,
       file: 'dist/post.js',
       format: 'es',
-      sourcemap: true
+      sourcemap: true,
     },
-    plugins: sharedPlugins
-  }
+    plugins: sharedPlugins,
+  },
 ]
 
 export default config

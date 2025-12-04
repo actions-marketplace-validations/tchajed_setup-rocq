@@ -7,7 +7,7 @@ import * as core from '../__fixtures__/core.js'
 // Mock cache module
 const mockRestoreCache = jest.fn<() => Promise<boolean>>()
 const mockCache = {
-  restoreCache: mockRestoreCache
+  restoreCache: mockRestoreCache,
 }
 
 // Mock opam module
@@ -23,13 +23,13 @@ const mockOpam = {
   createSwitch: mockCreateSwitch,
   setupOpamEnv: mockSetupOpamEnv,
   installRocq: mockInstallRocq,
-  opamList: mockOpamList
+  opamList: mockOpamList,
 }
 
 // Mock unix module
 const mockInstallSystemPackages = jest.fn<() => Promise<void>>()
 const mockUnix = {
-  installSystemPackages: mockInstallSystemPackages
+  installSystemPackages: mockInstallSystemPackages,
 }
 
 // Mocks should be declared before the module being tested is imported.

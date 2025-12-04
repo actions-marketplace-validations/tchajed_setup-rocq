@@ -26,7 +26,7 @@ export async function restoreCache(): Promise<boolean> {
     const restoredKey = await cache.restoreCache([opamRoot], cacheKey, [
       `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}-`,
       `setup-rocq-${CACHE_VERSION}-${PLATFORM}-`,
-      `setup-rocq-${CACHE_VERSION}-`
+      `setup-rocq-${CACHE_VERSION}-`,
     ])
 
     if (restoredKey) {

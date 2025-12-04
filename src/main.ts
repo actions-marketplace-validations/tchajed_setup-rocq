@@ -6,7 +6,7 @@ import {
   createSwitch,
   setupOpamEnv,
   installRocq,
-  opamList
+  opamList,
 } from './opam.js'
 import { installSystemPackages } from './unix.js'
 import { ROCQ_VERSION } from './constants.js'

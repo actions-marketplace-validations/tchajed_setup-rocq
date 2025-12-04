@@ -8,7 +8,7 @@ const MANDATORY_LINUX_PACKAGES = [
   'rsync',
   'libgmp-dev',
   'pkg-config',
-  'sqlite3'
+  'sqlite3',
 ]
 
 const MACOS_PACKAGES = ['darcs', 'mercurial']
@@ -23,18 +23,18 @@ async function installLinuxPackages(): Promise<void> {
         'apt-get',
         'install',
         '-y',
-        ...packagesToInstall
+        ...packagesToInstall,
       ])
     } catch {
       core.info(
-        'Package installation failed, updating package lists and retrying'
+        'Package installation failed, updating package lists and retrying',
       )
       await exec.exec('sudo', ['apt-get', 'update'])
       await exec.exec('sudo', [
         'apt-get',
         'install',
         '-y',
-        ...packagesToInstall
+        ...packagesToInstall,
       ])
     }
   }
