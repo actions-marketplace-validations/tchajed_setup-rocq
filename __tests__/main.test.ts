@@ -1,62 +1,99 @@
 /**
  * Unit tests for the action's main functionality, src/main.ts
- *
- * To mock dependencies in ESM, you can create fixtures that export mock
- * functions and objects. For example, the core module is mocked in this test,
- * so that the actual '@actions/core' module is not imported.
  */
 import { jest } from '@jest/globals'
 import * as core from '../__fixtures__/core.js'
-import { wait } from '../__fixtures__/wait.js'
+
+// Mock cache module
+const mockRestoreCache = jest.fn<() => Promise<boolean>>()
+const mockCache = {
+  restoreCache: mockRestoreCache
+}
+
+// Mock opam module
+const mockAcquireOpam = jest.fn<() => Promise<void>>()
+const mockInitializeOpam = jest.fn<() => Promise<void>>()
+const mockCreateSwitch = jest.fn<() => Promise<void>>()
+const mockSetupOpamEnv = jest.fn<() => Promise<void>>()
+const mockDisableDuneCache = jest.fn<() => Promise<void>>()
+const mockOpam = {
+  acquireOpam: mockAcquireOpam,
+  initializeOpam: mockInitializeOpam,
+  createSwitch: mockCreateSwitch,
+  setupOpamEnv: mockSetupOpamEnv,
+  disableDuneCache: mockDisableDuneCache
+}
 
 // Mocks should be declared before the module being tested is imported.
 jest.unstable_mockModule('@actions/core', () => core)
-jest.unstable_mockModule('../src/wait.js', () => ({ wait }))
+jest.unstable_mockModule('../src/cache.js', () => mockCache)
+jest.unstable_mockModule('../src/opam.js', () => mockOpam)
 
-// The module being tested should be imported dynamically. This ensures that the
-// mocks are used in place of any actual dependencies.
+// The module being tested should be imported dynamically.
 const { run } = await import('../src/main.js')
 
 describe('main.ts', () => {
   beforeEach(() => {
-    // Set the action's inputs as return values from core.getInput().
-    core.getInput.mockImplementation(() => '500')
+    // Set the action's inputs
+    core.getInput.mockImplementation((name: string) => {
+      if (name === 'rocq-version') return 'latest'
+      return ''
+    })
 
-    // Mock the wait function so that it does not actually wait.
-    wait.mockImplementation(() => Promise.resolve('done!'))
+    // Mock all opam functions to succeed by default
+    mockRestoreCache.mockResolvedValue(false)
+    mockAcquireOpam.mockResolvedValue(undefined)
+    mockInitializeOpam.mockResolvedValue(undefined)
+    mockCreateSwitch.mockResolvedValue(undefined)
+    mockSetupOpamEnv.mockResolvedValue(undefined)
+    mockDisableDuneCache.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
     jest.resetAllMocks()
   })
 
-  it('Sets the time output', async () => {
+  it('Installs opam when cache is not restored', async () => {
+    mockRestoreCache.mockResolvedValue(false)
+
     await run()
 
-    // Verify the time output was set.
-    expect(core.setOutput).toHaveBeenNthCalledWith(
-      1,
-      'time',
-      // Simple regex to match a time string in the format HH:MM:SS.
-      expect.stringMatching(/^\d{2}:\d{2}:\d{2}/)
-    )
+    // Verify all setup steps were called
+    expect(mockRestoreCache).toHaveBeenCalled()
+    expect(mockAcquireOpam).toHaveBeenCalled()
+    expect(mockInitializeOpam).toHaveBeenCalled()
+    expect(mockCreateSwitch).toHaveBeenCalled()
+    expect(mockSetupOpamEnv).toHaveBeenCalled()
+    expect(mockDisableDuneCache).toHaveBeenCalled()
+    expect(core.setFailed).not.toHaveBeenCalled()
   })
 
-  it('Sets a failed status', async () => {
-    // Clear the getInput mock and return an invalid value.
-    core.getInput.mockClear().mockReturnValueOnce('this is not a number')
-
-    // Clear the wait mock and return a rejected promise.
-    wait
-      .mockClear()
-      .mockRejectedValueOnce(new Error('milliseconds is not a number'))
+  it('Skips installation when cache is restored', async () => {
+    mockRestoreCache.mockResolvedValue(true)
 
     await run()
 
-    // Verify that the action was marked as failed.
-    expect(core.setFailed).toHaveBeenNthCalledWith(
-      1,
-      'milliseconds is not a number'
-    )
+    // Verify cache restore was checked
+    expect(mockRestoreCache).toHaveBeenCalled()
+
+    // Verify installation steps were skipped
+    expect(mockAcquireOpam).not.toHaveBeenCalled()
+    expect(mockInitializeOpam).not.toHaveBeenCalled()
+    expect(mockCreateSwitch).not.toHaveBeenCalled()
+
+    // But environment setup should still run
+    expect(mockSetupOpamEnv).toHaveBeenCalled()
+    expect(mockDisableDuneCache).toHaveBeenCalled()
+    expect(core.setFailed).not.toHaveBeenCalled()
+  })
+
+  it('Sets failed status on error', async () => {
+    const errorMessage = 'Failed to acquire opam'
+    mockAcquireOpam.mockRejectedValue(new Error(errorMessage))
+
+    await run()
+
+    // Verify that the action was marked as failed
+    expect(core.setFailed).toHaveBeenCalledWith(errorMessage)
   })
 })
