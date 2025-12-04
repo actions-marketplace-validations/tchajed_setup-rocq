@@ -38,6 +38,7 @@ import require$$1$8 from 'tty';
 import require$$0$d from 'node:crypto';
 import require$$2$5 from 'node:buffer';
 import require$$1$9 from 'node:fs';
+import * as fs from 'fs/promises';
 
 var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
@@ -87254,6 +87255,29 @@ function getCachePaths() {
     }
     return paths;
 }
+async function copyDirectory(src, dest, excludes = []) {
+    await fs.mkdir(dest, { recursive: true });
+    const entries = await fs.readdir(src, { withFileTypes: true });
+    for (const entry of entries) {
+        if (excludes.includes(entry.name)) {
+            continue;
+        }
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+            await copyDirectory(srcPath, destPath, excludes);
+        }
+        else if (entry.isFile() || entry.isSymbolicLink()) {
+            try {
+                await fs.copyFile(srcPath, destPath);
+            }
+            catch (error) {
+                // Skip files we can't copy (permission issues)
+                coreExports.debug(`Skipped copying ${srcPath}: ${error}`);
+            }
+        }
+    }
+}
 async function copyAptCache() {
     if (!IS_LINUX) {
         return;
@@ -87263,25 +87287,28 @@ async function copyAptCache() {
     const listsDir = path.join(aptCacheDir, 'lists');
     try {
         // Create cache directories
-        await execExports.exec('mkdir', ['-p', archivesDir, listsDir]);
-        // Copy apt archives (excluding lock and partial directories)
-        await execExports.exec('sudo', [
-            'rsync',
-            '-a',
-            '--exclude=lock',
-            '--exclude=partial',
-            '/var/cache/apt/archives/',
-            archivesDir,
+        await fs.mkdir(aptCacheDir, { recursive: true });
+        // Ensure system directories exist and copy apt archives
+        try {
+            await fs.access('/var/cache/apt/archives');
+        }
+        catch {
+            coreExports.info('Creating /var/cache/apt/archives');
+            await execExports.exec('sudo', ['mkdir', '-p', '/var/cache/apt/archives']);
+        }
+        await copyDirectory('/var/cache/apt/archives', archivesDir, [
+            'lock',
+            'partial',
         ]);
-        // Copy apt lists (excluding lock and partial directories)
-        await execExports.exec('sudo', [
-            'rsync',
-            '-a',
-            '--exclude=lock',
-            '--exclude=partial',
-            '/var/lib/apt/lists/',
-            listsDir,
-        ]);
+        // Ensure system directories exist and copy apt lists
+        try {
+            await fs.access('/var/lib/apt/lists');
+        }
+        catch {
+            coreExports.info('Creating /var/lib/apt/lists');
+            await execExports.exec('sudo', ['mkdir', '-p', '/var/lib/apt/lists']);
+        }
+        await copyDirectory('/var/lib/apt/lists', listsDir, ['lock', 'partial']);
         coreExports.info('Copied apt cache to user directory');
     }
     catch (error) {

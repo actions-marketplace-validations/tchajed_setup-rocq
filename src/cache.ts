@@ -3,6 +3,7 @@ import * as cache from '@actions/cache'
 import * as exec from '@actions/exec'
 import * as path from 'path'
 import * as os from 'os'
+import * as fs from 'fs/promises'
 import { PLATFORM, ARCHITECTURE, ROCQ_VERSION, IS_LINUX } from './constants.js'
 import { opamClean } from './opam.js'
 import { getRocqWeeklyDir } from './rocq.js'
@@ -37,6 +38,36 @@ function getCachePaths(): string[] {
   return paths
 }
 
+async function copyDirectory(
+  src: string,
+  dest: string,
+  excludes: string[] = [],
+): Promise<void> {
+  await fs.mkdir(dest, { recursive: true })
+
+  const entries = await fs.readdir(src, { withFileTypes: true })
+
+  for (const entry of entries) {
+    if (excludes.includes(entry.name)) {
+      continue
+    }
+
+    const srcPath = path.join(src, entry.name)
+    const destPath = path.join(dest, entry.name)
+
+    if (entry.isDirectory()) {
+      await copyDirectory(srcPath, destPath, excludes)
+    } else if (entry.isFile() || entry.isSymbolicLink()) {
+      try {
+        await fs.copyFile(srcPath, destPath)
+      } catch (error) {
+        // Skip files we can't copy (permission issues)
+        core.debug(`Skipped copying ${srcPath}: ${error}`)
+      }
+    }
+  }
+}
+
 async function copyAptCache(): Promise<void> {
   if (!IS_LINUX) {
     return
@@ -48,27 +79,28 @@ async function copyAptCache(): Promise<void> {
 
   try {
     // Create cache directories
-    await exec.exec('mkdir', ['-p', archivesDir, listsDir])
+    await fs.mkdir(aptCacheDir, { recursive: true })
 
-    // Copy apt archives (excluding lock and partial directories)
-    await exec.exec('sudo', [
-      'rsync',
-      '-a',
-      '--exclude=lock',
-      '--exclude=partial',
-      '/var/cache/apt/archives/',
-      archivesDir,
+    // Ensure system directories exist and copy apt archives
+    try {
+      await fs.access('/var/cache/apt/archives')
+    } catch {
+      core.info('Creating /var/cache/apt/archives')
+      await exec.exec('sudo', ['mkdir', '-p', '/var/cache/apt/archives'])
+    }
+    await copyDirectory('/var/cache/apt/archives', archivesDir, [
+      'lock',
+      'partial',
     ])
 
-    // Copy apt lists (excluding lock and partial directories)
-    await exec.exec('sudo', [
-      'rsync',
-      '-a',
-      '--exclude=lock',
-      '--exclude=partial',
-      '/var/lib/apt/lists/',
-      listsDir,
-    ])
+    // Ensure system directories exist and copy apt lists
+    try {
+      await fs.access('/var/lib/apt/lists')
+    } catch {
+      core.info('Creating /var/lib/apt/lists')
+      await exec.exec('sudo', ['mkdir', '-p', '/var/lib/apt/lists'])
+    }
+    await copyDirectory('/var/lib/apt/lists', listsDir, ['lock', 'partial'])
 
     core.info('Copied apt cache to user directory')
   } catch (error) {
@@ -88,19 +120,33 @@ async function restoreAptCache(): Promise<void> {
   const listsDir = path.join(aptCacheDir, 'lists')
 
   try {
-    // Restore archives if they exist
+    // Check if cached directories exist
+    try {
+      await fs.access(archivesDir)
+    } catch {
+      core.info('No cached apt archives found')
+      return
+    }
+
+    // Ensure /var/cache/apt/archives exists
+    await exec.exec('sudo', ['mkdir', '-p', '/var/cache/apt/archives'])
+
+    // Restore archives
     await exec.exec('sudo', [
-      'rsync',
-      '-a',
-      archivesDir + '/',
+      'cp',
+      '-r',
+      archivesDir + '/.',
       '/var/cache/apt/archives/',
     ])
 
-    // Restore lists if they exist
+    // Ensure /var/lib/apt/lists exists
+    await exec.exec('sudo', ['mkdir', '-p', '/var/lib/apt/lists'])
+
+    // Restore lists
     await exec.exec('sudo', [
-      'rsync',
-      '-a',
-      listsDir + '/',
+      'cp',
+      '-r',
+      listsDir + '/.',
       '/var/lib/apt/lists/',
     ])
 

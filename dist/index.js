@@ -39,6 +39,7 @@ import require$$1$8 from 'tty';
 import require$$0$d from 'node:crypto';
 import require$$2$5 from 'node:buffer';
 import require$$1$9 from 'node:fs';
+import * as fs from 'fs/promises';
 
 var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
@@ -92333,18 +92334,30 @@ async function restoreAptCache() {
     const archivesDir = path.join(aptCacheDir, 'archives');
     const listsDir = path.join(aptCacheDir, 'lists');
     try {
-        // Restore archives if they exist
+        // Check if cached directories exist
+        try {
+            await fs.access(archivesDir);
+        }
+        catch {
+            coreExports.info('No cached apt archives found');
+            return;
+        }
+        // Ensure /var/cache/apt/archives exists
+        await execExports.exec('sudo', ['mkdir', '-p', '/var/cache/apt/archives']);
+        // Restore archives
         await execExports.exec('sudo', [
-            'rsync',
-            '-a',
-            archivesDir + '/',
+            'cp',
+            '-r',
+            archivesDir + '/.',
             '/var/cache/apt/archives/',
         ]);
-        // Restore lists if they exist
+        // Ensure /var/lib/apt/lists exists
+        await execExports.exec('sudo', ['mkdir', '-p', '/var/lib/apt/lists']);
+        // Restore lists
         await execExports.exec('sudo', [
-            'rsync',
-            '-a',
-            listsDir + '/',
+            'cp',
+            '-r',
+            listsDir + '/.',
             '/var/lib/apt/lists/',
         ]);
         coreExports.info('Restored apt cache from user directory');
