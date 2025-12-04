@@ -8,7 +8,7 @@ import { opamClean } from './opam.js'
 export const CACHE_VERSION = 'v1'
 
 function getCacheKey(): string {
-  return `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}-rocq-${ROCQ_VERSION}`
+  return `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}-rocq-${ROCQ_VERSION()}`
 }
 
 function getOpamRoot(): string {

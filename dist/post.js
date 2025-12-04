@@ -83703,7 +83703,6 @@ function requireCache () {
 
 var cacheExports = requireCache();
 
-coreExports.getInput('rocq-version');
 require$$0$3.platform();
 require$$0$3.arch();
 process.env.GITHUB_TOKEN || '';

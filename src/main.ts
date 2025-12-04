@@ -34,7 +34,7 @@ export async function run(): Promise<void> {
     await setupOpamEnv()
 
     // Install Rocq
-    await installRocq(ROCQ_VERSION)
+    await installRocq(ROCQ_VERSION())
 
     core.info('Rocq development environment set up successfully')
   } catch (error) {
