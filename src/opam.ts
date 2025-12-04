@@ -259,9 +259,8 @@ async function installRocqDev(): Promise<void> {
 
 async function installRocqLatest(): Promise<void> {
   core.info('Installing latest Rocq version')
-  // Pin to a stable dune version that works with OCaml 5.2.0
-  await opamInstall('dune.3.16.1')
-  await opamInstall('coq')
+  await opamInstall('dune')
+  // await opamInstall('coq')
 }
 
 async function installRocqVersion(version: string): Promise<void> {

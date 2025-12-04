@@ -83511,9 +83511,8 @@ async function installRocqDev() {
 }
 async function installRocqLatest() {
     coreExports.info('Installing latest Rocq version');
-    // Pin to a stable dune version that works with OCaml 5.2.0
-    await opamInstall('dune.3.16.1');
-    await opamInstall('coq');
+    await opamInstall('dune');
+    // await opamInstall('coq')
 }
 async function installRocqVersion(version) {
     coreExports.info(`Installing Rocq version ${version}`);
@@ -83534,17 +83533,11 @@ async function installRocq(version) {
 }
 
 const MANDATORY_LINUX_PACKAGES = [
-    'bubblewrap',
+    // 'bubblewrap',
     'musl-tools',
     'rsync',
     'libgmp-dev',
     'pkg-config'
-];
-const OPTIONAL_LINUX_PACKAGES = [
-    'darcs',
-    'g++-multilib',
-    'gcc-multilib',
-    'mercurial'
 ];
 const MACOS_PACKAGES = ['darcs', 'mercurial'];
 async function disableManDbAutoUpdate() {
@@ -83567,33 +83560,29 @@ async function disableManDbAutoUpdate() {
         }
     }
 }
-async function isPackageInstallable(pkg) {
-    try {
-        await execExports.exec('apt-cache', ['show', pkg], {
-            silent: true
-        });
-        return true;
-    }
-    catch {
-        return false;
-    }
-}
 async function installLinuxPackages() {
     await disableManDbAutoUpdate();
-    // Check which optional packages are available
-    const installableOptional = [];
-    for (const pkg of OPTIONAL_LINUX_PACKAGES) {
-        if (await isPackageInstallable(pkg)) {
-            installableOptional.push(pkg);
-        }
-    }
-    const packagesToInstall = [
-        ...MANDATORY_LINUX_PACKAGES,
-        ...installableOptional
-    ];
+    const packagesToInstall = [...MANDATORY_LINUX_PACKAGES];
     if (packagesToInstall.length > 0) {
         coreExports.info(`Installing packages: ${packagesToInstall.join(', ')}`);
-        await execExports.exec('sudo', ['apt-get', 'install', '-y', ...packagesToInstall]);
+        try {
+            await execExports.exec('sudo', [
+                'apt-get',
+                'install',
+                '-y',
+                ...packagesToInstall
+            ]);
+        }
+        catch (error) {
+            coreExports.info('Package installation failed, updating package lists and retrying');
+            await execExports.exec('sudo', ['apt-get', 'update']);
+            await execExports.exec('sudo', [
+                'apt-get',
+                'install',
+                '-y',
+                ...packagesToInstall
+            ]);
+        }
     }
 }
 async function installMacOSPackages() {

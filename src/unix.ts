@@ -3,18 +3,11 @@ import * as exec from '@actions/exec'
 import { IS_LINUX, IS_MACOS } from './constants.js'
 
 const MANDATORY_LINUX_PACKAGES = [
-  'bubblewrap',
+  // 'bubblewrap',
   'musl-tools',
   'rsync',
   'libgmp-dev',
   'pkg-config'
-]
-
-const OPTIONAL_LINUX_PACKAGES = [
-  'darcs',
-  'g++-multilib',
-  'gcc-multilib',
-  'mercurial'
 ]
 
 const MACOS_PACKAGES = ['darcs', 'mercurial']
@@ -39,36 +32,32 @@ async function disableManDbAutoUpdate(): Promise<void> {
   }
 }
 
-async function isPackageInstallable(pkg: string): Promise<boolean> {
-  try {
-    await exec.exec('apt-cache', ['show', pkg], {
-      silent: true
-    } as exec.ExecOptions)
-    return true
-  } catch {
-    return false
-  }
-}
-
 async function installLinuxPackages(): Promise<void> {
   await disableManDbAutoUpdate()
 
-  // Check which optional packages are available
-  const installableOptional: string[] = []
-  for (const pkg of OPTIONAL_LINUX_PACKAGES) {
-    if (await isPackageInstallable(pkg)) {
-      installableOptional.push(pkg)
-    }
-  }
-
-  const packagesToInstall = [
-    ...MANDATORY_LINUX_PACKAGES,
-    ...installableOptional
-  ]
+  const packagesToInstall = [...MANDATORY_LINUX_PACKAGES]
 
   if (packagesToInstall.length > 0) {
     core.info(`Installing packages: ${packagesToInstall.join(', ')}`)
-    await exec.exec('sudo', ['apt-get', 'install', '-y', ...packagesToInstall])
+    try {
+      await exec.exec('sudo', [
+        'apt-get',
+        'install',
+        '-y',
+        ...packagesToInstall
+      ])
+    } catch (error) {
+      core.info(
+        'Package installation failed, updating package lists and retrying'
+      )
+      await exec.exec('sudo', ['apt-get', 'update'])
+      await exec.exec('sudo', [
+        'apt-get',
+        'install',
+        '-y',
+        ...packagesToInstall
+      ])
+    }
   }
 }
 
