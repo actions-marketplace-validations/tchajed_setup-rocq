@@ -83506,7 +83506,7 @@ async function installRocqDev() {
 async function installRocqLatest() {
     coreExports.info('Installing latest Rocq version');
     // await opamInstall('coq')
-    await opamInstall('dune');
+    //await opamInstall('dune')
 }
 async function installRocqVersion(version) {
     coreExports.info(`Installing Rocq version ${version}`);
