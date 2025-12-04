@@ -11,14 +11,12 @@ const mockCache = {
 }
 
 // Mock opam module
-const mockAcquireOpam = jest.fn<() => Promise<void>>()
-const mockInitializeOpam = jest.fn<() => Promise<void>>()
+const mockSetupOpam = jest.fn<() => Promise<void>>()
 const mockCreateSwitch = jest.fn<() => Promise<void>>()
 const mockSetupOpamEnv = jest.fn<() => Promise<void>>()
 const mockDisableDuneCache = jest.fn<() => Promise<void>>()
 const mockOpam = {
-  acquireOpam: mockAcquireOpam,
-  initializeOpam: mockInitializeOpam,
+  setupOpam: mockSetupOpam,
   createSwitch: mockCreateSwitch,
   setupOpamEnv: mockSetupOpamEnv,
   disableDuneCache: mockDisableDuneCache
@@ -42,8 +40,7 @@ describe('main.ts', () => {
 
     // Mock all opam functions to succeed by default
     mockRestoreCache.mockResolvedValue(false)
-    mockAcquireOpam.mockResolvedValue(undefined)
-    mockInitializeOpam.mockResolvedValue(undefined)
+    mockSetupOpam.mockResolvedValue(undefined)
     mockCreateSwitch.mockResolvedValue(undefined)
     mockSetupOpamEnv.mockResolvedValue(undefined)
     mockDisableDuneCache.mockResolvedValue(undefined)
@@ -53,22 +50,21 @@ describe('main.ts', () => {
     jest.resetAllMocks()
   })
 
-  it('Installs opam when cache is not restored', async () => {
+  it('Installs OCaml when cache is not restored', async () => {
     mockRestoreCache.mockResolvedValue(false)
 
     await run()
 
     // Verify all setup steps were called
     expect(mockRestoreCache).toHaveBeenCalled()
-    expect(mockAcquireOpam).toHaveBeenCalled()
-    expect(mockInitializeOpam).toHaveBeenCalled()
+    expect(mockSetupOpam).toHaveBeenCalled()
     expect(mockCreateSwitch).toHaveBeenCalled()
     expect(mockSetupOpamEnv).toHaveBeenCalled()
     expect(mockDisableDuneCache).toHaveBeenCalled()
     expect(core.setFailed).not.toHaveBeenCalled()
   })
 
-  it('Skips installation when cache is restored', async () => {
+  it('Skips OCaml installation when cache is restored', async () => {
     mockRestoreCache.mockResolvedValue(true)
 
     await run()
@@ -76,9 +72,10 @@ describe('main.ts', () => {
     // Verify cache restore was checked
     expect(mockRestoreCache).toHaveBeenCalled()
 
-    // Verify installation steps were skipped
-    expect(mockAcquireOpam).not.toHaveBeenCalled()
-    expect(mockInitializeOpam).not.toHaveBeenCalled()
+    // Opam setup should always run
+    expect(mockSetupOpam).toHaveBeenCalled()
+
+    // OCaml installation should be skipped
     expect(mockCreateSwitch).not.toHaveBeenCalled()
 
     // But environment setup should still run
@@ -88,8 +85,8 @@ describe('main.ts', () => {
   })
 
   it('Sets failed status on error', async () => {
-    const errorMessage = 'Failed to acquire opam'
-    mockAcquireOpam.mockRejectedValue(new Error(errorMessage))
+    const errorMessage = 'Failed to set up opam'
+    mockSetupOpam.mockRejectedValue(new Error(errorMessage))
 
     await run()
 

@@ -1,13 +1,11 @@
 import * as core from '@actions/core'
 import { restoreCache } from './cache.js'
 import {
-  acquireOpam,
-  initializeOpam,
+  setupOpam,
   createSwitch,
   setupOpamEnv,
   disableDuneCache
 } from './opam.js'
-import { OCAML_VERSION } from './constants.js'
 
 export async function run(): Promise<void> {
   try {
@@ -18,36 +16,23 @@ export async function run(): Promise<void> {
     const cacheRestored = await restoreCache()
     core.endGroup()
 
-    if (cacheRestored) {
-      core.info('Cache restored, skipping opam installation')
-      // Still need to set up the environment variables
+    // Step 2: Always set up opam (acquire and initialize)
+    await setupOpam()
+
+    // Step 3: Create OCaml switch (only if cache was not restored)
+    if (!cacheRestored) {
+      await createSwitch()
+
+      // Step 4: Set up opam environment
       await setupOpamEnv()
     } else {
-      // Step 2: Acquire opam
-      core.startGroup('Downloading and installing opam')
-      await acquireOpam()
-      core.endGroup()
-
-      // Step 3: Initialize opam
-      core.startGroup('Initializing opam')
-      await initializeOpam()
-      core.endGroup()
-
-      // Step 4: Create OCaml switch
-      core.startGroup(`Installing OCaml ${OCAML_VERSION}`)
-      await createSwitch()
-      core.endGroup()
-
-      // Step 5: Set up opam environment
-      core.startGroup('Setting up opam environment')
+      core.info('Skipping OCaml installation (restored from cache)')
+      // Still need to set up the environment variables
       await setupOpamEnv()
-      core.endGroup()
     }
 
-    // Step 6: Disable dune cache
-    core.startGroup('Disabling dune cache')
+    // Step 5: Disable dune cache
     await disableDuneCache()
-    core.endGroup()
 
     core.info('Rocq development environment set up successfully')
 

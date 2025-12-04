@@ -76468,61 +76468,69 @@ function getOpamUrl() {
     }
 }
 async function acquireOpam() {
-    const cachedPath = toolCacheExports.find('opam', OPAM_VERSION, ARCHITECTURE);
-    const opam = IS_WINDOWS ? 'opam.exe' : 'opam';
-    if (cachedPath === '') {
-        const browserDownloadUrl = getOpamUrl();
-        let downloadedPath;
-        if (IS_WINDOWS) {
-            const zipPath = await toolCacheExports.downloadTool(browserDownloadUrl);
-            const extractedPath = await toolCacheExports.extractZip(zipPath);
-            downloadedPath = require$$1$2.join(extractedPath, opam);
+    await coreExports.group('Installing opam', async () => {
+        const cachedPath = toolCacheExports.find('opam', OPAM_VERSION, ARCHITECTURE);
+        const opam = IS_WINDOWS ? 'opam.exe' : 'opam';
+        if (cachedPath === '') {
+            const browserDownloadUrl = getOpamUrl();
+            let downloadedPath;
+            if (IS_WINDOWS) {
+                const zipPath = await toolCacheExports.downloadTool(browserDownloadUrl);
+                const extractedPath = await toolCacheExports.extractZip(zipPath);
+                downloadedPath = require$$1$2.join(extractedPath, opam);
+            }
+            else {
+                downloadedPath = await toolCacheExports.downloadTool(browserDownloadUrl);
+            }
+            coreExports.info(`Downloaded opam ${OPAM_VERSION} from ${browserDownloadUrl}`);
+            const cachedPath = await toolCacheExports.cacheFile(downloadedPath, opam, 'opam', OPAM_VERSION, ARCHITECTURE);
+            coreExports.info(`Successfully cached opam to ${cachedPath}`);
+            // Make the binary executable on Unix-like systems
+            if (!IS_WINDOWS) {
+                const fs = await import('fs/promises');
+                await fs.chmod(require$$1$2.join(cachedPath, opam), 0o755);
+            }
+            coreExports.addPath(cachedPath);
+            coreExports.info('Added opam to the path');
         }
         else {
-            downloadedPath = await toolCacheExports.downloadTool(browserDownloadUrl);
+            coreExports.addPath(cachedPath);
+            coreExports.info('Added cached opam to the path');
         }
-        coreExports.info(`Downloaded opam ${OPAM_VERSION} from ${browserDownloadUrl}`);
-        const cachedPath = await toolCacheExports.cacheFile(downloadedPath, opam, 'opam', OPAM_VERSION, ARCHITECTURE);
-        coreExports.info(`Successfully cached opam to ${cachedPath}`);
-        // Make the binary executable on Unix-like systems
-        if (!IS_WINDOWS) {
-            const fs = await import('fs/promises');
-            await fs.chmod(require$$1$2.join(cachedPath, opam), 0o755);
-        }
-        coreExports.addPath(cachedPath);
-        coreExports.info('Added opam to the path');
-    }
-    else {
-        coreExports.addPath(cachedPath);
-        coreExports.info('Added cached opam to the path');
-    }
+    });
 }
 async function initializeOpam() {
-    coreExports.info('Initializing opam');
-    // Set environment variables
-    const opamRoot = require$$1$2.join(require$$0$3.homedir(), '.opam');
-    coreExports.exportVariable('OPAMROOT', opamRoot);
-    coreExports.exportVariable('OPAMYES', '1');
-    coreExports.exportVariable('OPAMCONFIRMLEVEL', 'unsafe-yes');
-    coreExports.exportVariable('OPAMROOTISOK', 'true');
-    const args = ['init', '--bare', '--disable-sandboxing'];
-    {
-        coreExports.info('Sandboxing is disabled');
-    }
-    await execExports.exec('opam', args);
+    await coreExports.group('Initialising opam', async () => {
+        // Set environment variables
+        const opamRoot = require$$1$2.join(require$$0$3.homedir(), '.opam');
+        coreExports.exportVariable('OPAMROOT', opamRoot);
+        coreExports.exportVariable('OPAMYES', '1');
+        coreExports.exportVariable('OPAMCONFIRMLEVEL', 'unsafe-yes');
+        coreExports.exportVariable('OPAMROOTISOK', 'true');
+        const args = ['init', '--bare', '--disable-sandboxing'];
+        {
+            coreExports.info('Sandboxing is disabled');
+        }
+        await execExports.exec('opam', args);
+    });
+}
+async function setupOpam() {
+    await acquireOpam();
+    await initializeOpam();
 }
 async function createSwitch() {
-    coreExports.info(`Creating opam switch with OCaml ${OCAML_VERSION}`);
-    await execExports.exec('opam', [
-        'switch',
-        'create',
-        'default',
-        `ocaml-base-compiler.${OCAML_VERSION}`,
-        '--yes'
-    ]);
+    await coreExports.group('Installing OCaml', async () => {
+        coreExports.info(`Creating opam switch with OCaml ${OCAML_VERSION}`);
+        await execExports.exec('opam', [
+            'switch',
+            'create',
+            'default',
+            `ocaml-base-compiler.${OCAML_VERSION}`,
+            '--yes'
+        ]);
+    });
 }
 async function setupOpamEnv() {
-    coreExports.info('Setting up opam environment');
     let output = '';
     const options = {
         listeners: {
@@ -76553,15 +76561,17 @@ async function setupOpamEnv() {
     }
 }
 async function disableDuneCache() {
-    coreExports.info('Disabling dune cache');
-    // Create a dune config file that disables caching
-    const duneConfigDir = require$$1$2.join(require$$0$3.homedir(), '.config', 'dune');
-    const duneConfigPath = require$$1$2.join(duneConfigDir, 'config');
-    // Ensure the directory exists
-    await execExports.exec('mkdir', ['-p', duneConfigDir]);
-    // Write config to disable cache
-    const fs = await import('fs/promises');
-    await fs.writeFile(duneConfigPath, '(cache disabled)\n');
+    await coreExports.group('Disabling dune cache', async () => {
+        // Create a dune config file that disables caching
+        const duneConfigDir = require$$1$2.join(require$$0$3.homedir(), '.config', 'dune');
+        const duneConfigPath = require$$1$2.join(duneConfigDir, 'config');
+        // Ensure the directory exists
+        await execExports.exec('mkdir', ['-p', duneConfigDir]);
+        // Write config to disable cache
+        const fs = await import('fs/promises');
+        await fs.writeFile(duneConfigPath, '(cache disabled)\n');
+        coreExports.info('Dune cache disabled');
+    });
 }
 
 async function run() {
@@ -76571,33 +76581,21 @@ async function run() {
         coreExports.startGroup('Restoring opam cache');
         const cacheRestored = await restoreCache();
         coreExports.endGroup();
-        if (cacheRestored) {
-            coreExports.info('Cache restored, skipping opam installation');
-            // Still need to set up the environment variables
+        // Step 2: Always set up opam (acquire and initialize)
+        await setupOpam();
+        // Step 3: Create OCaml switch (only if cache was not restored)
+        if (!cacheRestored) {
+            await createSwitch();
+            // Step 4: Set up opam environment
             await setupOpamEnv();
         }
         else {
-            // Step 2: Acquire opam
-            coreExports.startGroup('Downloading and installing opam');
-            await acquireOpam();
-            coreExports.endGroup();
-            // Step 3: Initialize opam
-            coreExports.startGroup('Initializing opam');
-            await initializeOpam();
-            coreExports.endGroup();
-            // Step 4: Create OCaml switch
-            coreExports.startGroup(`Installing OCaml ${OCAML_VERSION}`);
-            await createSwitch();
-            coreExports.endGroup();
-            // Step 5: Set up opam environment
-            coreExports.startGroup('Setting up opam environment');
+            coreExports.info('Skipping OCaml installation (restored from cache)');
+            // Still need to set up the environment variables
             await setupOpamEnv();
-            coreExports.endGroup();
         }
-        // Step 6: Disable dune cache
-        coreExports.startGroup('Disabling dune cache');
+        // Step 5: Disable dune cache
         await disableDuneCache();
-        coreExports.endGroup();
         coreExports.info('Rocq development environment set up successfully');
         // Get the rocq-version input for future use
         const rocqVersion = coreExports.getInput('rocq-version');

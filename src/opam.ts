@@ -29,80 +29,87 @@ function getOpamUrl(): string {
 }
 
 export async function acquireOpam(): Promise<void> {
-  const cachedPath = tc.find('opam', OPAM_VERSION, ARCHITECTURE)
-  const opam = IS_WINDOWS ? 'opam.exe' : 'opam'
+  await core.group('Installing opam', async () => {
+    const cachedPath = tc.find('opam', OPAM_VERSION, ARCHITECTURE)
+    const opam = IS_WINDOWS ? 'opam.exe' : 'opam'
 
-  if (cachedPath === '') {
-    const browserDownloadUrl = getOpamUrl()
-    let downloadedPath: string
+    if (cachedPath === '') {
+      const browserDownloadUrl = getOpamUrl()
+      let downloadedPath: string
 
-    if (IS_WINDOWS) {
-      const zipPath = await tc.downloadTool(browserDownloadUrl)
-      const extractedPath = await tc.extractZip(zipPath)
-      downloadedPath = path.join(extractedPath, opam)
+      if (IS_WINDOWS) {
+        const zipPath = await tc.downloadTool(browserDownloadUrl)
+        const extractedPath = await tc.extractZip(zipPath)
+        downloadedPath = path.join(extractedPath, opam)
+      } else {
+        downloadedPath = await tc.downloadTool(browserDownloadUrl)
+      }
+
+      core.info(`Downloaded opam ${OPAM_VERSION} from ${browserDownloadUrl}`)
+
+      const cachedPath = await tc.cacheFile(
+        downloadedPath,
+        opam,
+        'opam',
+        OPAM_VERSION,
+        ARCHITECTURE
+      )
+
+      core.info(`Successfully cached opam to ${cachedPath}`)
+
+      // Make the binary executable on Unix-like systems
+      if (!IS_WINDOWS) {
+        const fs = await import('fs/promises')
+        await fs.chmod(path.join(cachedPath, opam), 0o755)
+      }
+
+      core.addPath(cachedPath)
+      core.info('Added opam to the path')
     } else {
-      downloadedPath = await tc.downloadTool(browserDownloadUrl)
+      core.addPath(cachedPath)
+      core.info('Added cached opam to the path')
     }
-
-    core.info(`Downloaded opam ${OPAM_VERSION} from ${browserDownloadUrl}`)
-
-    const cachedPath = await tc.cacheFile(
-      downloadedPath,
-      opam,
-      'opam',
-      OPAM_VERSION,
-      ARCHITECTURE
-    )
-
-    core.info(`Successfully cached opam to ${cachedPath}`)
-
-    // Make the binary executable on Unix-like systems
-    if (!IS_WINDOWS) {
-      const fs = await import('fs/promises')
-      await fs.chmod(path.join(cachedPath, opam), 0o755)
-    }
-
-    core.addPath(cachedPath)
-    core.info('Added opam to the path')
-  } else {
-    core.addPath(cachedPath)
-    core.info('Added cached opam to the path')
-  }
+  })
 }
 
 export async function initializeOpam(): Promise<void> {
-  core.info('Initializing opam')
+  await core.group('Initialising opam', async () => {
+    // Set environment variables
+    const opamRoot = path.join(os.homedir(), '.opam')
+    core.exportVariable('OPAMROOT', opamRoot)
+    core.exportVariable('OPAMYES', '1')
+    core.exportVariable('OPAMCONFIRMLEVEL', 'unsafe-yes')
+    core.exportVariable('OPAMROOTISOK', 'true')
 
-  // Set environment variables
-  const opamRoot = path.join(os.homedir(), '.opam')
-  core.exportVariable('OPAMROOT', opamRoot)
-  core.exportVariable('OPAMYES', '1')
-  core.exportVariable('OPAMCONFIRMLEVEL', 'unsafe-yes')
-  core.exportVariable('OPAMROOTISOK', 'true')
+    const args = ['init', '--bare', '--disable-sandboxing']
 
-  const args = ['init', '--bare', '--disable-sandboxing']
+    if (OPAM_DISABLE_SANDBOXING) {
+      core.info('Sandboxing is disabled')
+    }
 
-  if (OPAM_DISABLE_SANDBOXING) {
-    core.info('Sandboxing is disabled')
-  }
+    await exec.exec('opam', args)
+  })
+}
 
-  await exec.exec('opam', args)
+export async function setupOpam(): Promise<void> {
+  await acquireOpam()
+  await initializeOpam()
 }
 
 export async function createSwitch(): Promise<void> {
-  core.info(`Creating opam switch with OCaml ${OCAML_VERSION}`)
-  await exec.exec('opam', [
-    'switch',
-    'create',
-    'default',
-    `ocaml-base-compiler.${OCAML_VERSION}`,
-    '--yes'
-  ])
+  await core.group('Installing OCaml', async () => {
+    core.info(`Creating opam switch with OCaml ${OCAML_VERSION}`)
+    await exec.exec('opam', [
+      'switch',
+      'create',
+      'default',
+      `ocaml-base-compiler.${OCAML_VERSION}`,
+      '--yes'
+    ])
+  })
 }
 
 export async function setupOpamEnv(): Promise<void> {
-  core.info('Setting up opam environment')
-
   let output = ''
   const options = {
     listeners: {
@@ -137,15 +144,17 @@ export async function setupOpamEnv(): Promise<void> {
 }
 
 export async function disableDuneCache(): Promise<void> {
-  core.info('Disabling dune cache')
-  // Create a dune config file that disables caching
-  const duneConfigDir = path.join(os.homedir(), '.config', 'dune')
-  const duneConfigPath = path.join(duneConfigDir, 'config')
+  await core.group('Disabling dune cache', async () => {
+    // Create a dune config file that disables caching
+    const duneConfigDir = path.join(os.homedir(), '.config', 'dune')
+    const duneConfigPath = path.join(duneConfigDir, 'config')
 
-  // Ensure the directory exists
-  await exec.exec('mkdir', ['-p', duneConfigDir])
+    // Ensure the directory exists
+    await exec.exec('mkdir', ['-p', duneConfigDir])
 
-  // Write config to disable cache
-  const fs = await import('fs/promises')
-  await fs.writeFile(duneConfigPath, '(cache disabled)\n')
+    // Write config to disable cache
+    const fs = await import('fs/promises')
+    await fs.writeFile(duneConfigPath, '(cache disabled)\n')
+    core.info('Dune cache disabled')
+  })
 }
