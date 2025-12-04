@@ -74987,6 +74987,7 @@ const ARCHITECTURE = require$$0$3.arch();
 process.env.GITHUB_TOKEN || '';
 const IS_WINDOWS = PLATFORM === 'win32';
 const IS_MACOS = PLATFORM === 'darwin';
+const IS_LINUX = PLATFORM === 'linux';
 
 const CACHE_VERSION = 'v1';
 function getCacheKey() {
@@ -83525,12 +83526,94 @@ async function installRocq(version) {
     });
 }
 
+const MANDATORY_LINUX_PACKAGES = [
+    'bubblewrap',
+    'musl-tools',
+    'rsync',
+    'libgmp-dev',
+    'pkg-config'
+];
+const OPTIONAL_LINUX_PACKAGES = [
+    'darcs',
+    'g++-multilib',
+    'gcc-multilib',
+    'mercurial'
+];
+const MACOS_PACKAGES = ['darcs', 'mercurial'];
+async function disableManDbAutoUpdate() {
+    try {
+        await execExports.exec('sudo', ['debconf-communicate'], {
+            input: Buffer.from('set man-db/auto-update false')
+        });
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            coreExports.info(error.message);
+        }
+    }
+    try {
+        await execExports.exec('sudo', ['dpkg-reconfigure', 'man-db']);
+    }
+    catch (error) {
+        if (error instanceof Error) {
+            coreExports.info(error.message);
+        }
+    }
+}
+async function isPackageInstallable(pkg) {
+    try {
+        await execExports.exec('apt-cache', ['show', pkg], {
+            silent: true
+        });
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+async function installLinuxPackages() {
+    await disableManDbAutoUpdate();
+    // Check which optional packages are available
+    const installableOptional = [];
+    for (const pkg of OPTIONAL_LINUX_PACKAGES) {
+        if (await isPackageInstallable(pkg)) {
+            installableOptional.push(pkg);
+        }
+    }
+    const packagesToInstall = [
+        ...MANDATORY_LINUX_PACKAGES,
+        ...installableOptional
+    ];
+    if (packagesToInstall.length > 0) {
+        coreExports.info(`Installing packages: ${packagesToInstall.join(', ')}`);
+        await execExports.exec('sudo', ['apt-get', 'install', '-y', ...packagesToInstall]);
+    }
+}
+async function installMacOSPackages() {
+    if (MACOS_PACKAGES.length > 0) {
+        coreExports.info(`Installing packages: ${MACOS_PACKAGES.join(', ')}`);
+        await execExports.exec('brew', ['install', ...MACOS_PACKAGES]);
+    }
+}
+async function installSystemPackages() {
+    await coreExports.group('Installing system packages', async () => {
+        if (IS_LINUX) {
+            await installLinuxPackages();
+        }
+        else if (IS_MACOS) {
+            await installMacOSPackages();
+        }
+        coreExports.info('System packages installed');
+    });
+}
+
 async function run() {
     try {
         coreExports.info('Setting up Rocq development environment');
         coreExports.startGroup('Restoring opam cache');
         const cacheRestored = await restoreCache();
         coreExports.endGroup();
+        await installSystemPackages();
         await setupOpam();
         // Set up repositories (rocq-released + any additional ones)
         await setupRepositories();

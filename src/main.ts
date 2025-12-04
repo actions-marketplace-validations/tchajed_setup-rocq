@@ -8,6 +8,7 @@ import {
   disableDuneCache,
   installRocq
 } from './opam.js'
+import { installSystemPackages } from './unix.js'
 
 export async function run(): Promise<void> {
   try {
@@ -16,6 +17,8 @@ export async function run(): Promise<void> {
     core.startGroup('Restoring opam cache')
     const cacheRestored = await restoreCache()
     core.endGroup()
+
+    await installSystemPackages()
 
     await setupOpam()
 

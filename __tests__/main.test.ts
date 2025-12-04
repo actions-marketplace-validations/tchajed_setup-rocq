@@ -26,10 +26,17 @@ const mockOpam = {
   installRocq: mockInstallRocq
 }
 
+// Mock unix module
+const mockInstallSystemPackages = jest.fn<() => Promise<void>>()
+const mockUnix = {
+  installSystemPackages: mockInstallSystemPackages
+}
+
 // Mocks should be declared before the module being tested is imported.
 jest.unstable_mockModule('@actions/core', () => core)
 jest.unstable_mockModule('../src/cache.js', () => mockCache)
 jest.unstable_mockModule('../src/opam.js', () => mockOpam)
+jest.unstable_mockModule('../src/unix.js', () => mockUnix)
 
 // The module being tested should be imported dynamically.
 const { run } = await import('../src/main.js')
@@ -42,8 +49,9 @@ describe('main.ts', () => {
       return ''
     })
 
-    // Mock all opam functions to succeed by default
+    // Mock all functions to succeed by default
     mockRestoreCache.mockResolvedValue(false)
+    mockInstallSystemPackages.mockResolvedValue(undefined)
     mockSetupOpam.mockResolvedValue(undefined)
     mockSetupRepositories.mockResolvedValue(undefined)
     mockCreateSwitch.mockResolvedValue(undefined)
@@ -63,6 +71,7 @@ describe('main.ts', () => {
 
     // Verify all setup steps were called
     expect(mockRestoreCache).toHaveBeenCalled()
+    expect(mockInstallSystemPackages).toHaveBeenCalled()
     expect(mockSetupOpam).toHaveBeenCalled()
     expect(mockSetupRepositories).toHaveBeenCalled()
     expect(mockCreateSwitch).toHaveBeenCalled()
@@ -80,7 +89,8 @@ describe('main.ts', () => {
     // Verify cache restore was checked
     expect(mockRestoreCache).toHaveBeenCalled()
 
-    // Opam setup and repositories should always run
+    // System packages and opam setup should always run
+    expect(mockInstallSystemPackages).toHaveBeenCalled()
     expect(mockSetupOpam).toHaveBeenCalled()
     expect(mockSetupRepositories).toHaveBeenCalled()
 
