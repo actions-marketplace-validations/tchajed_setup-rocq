@@ -12,6 +12,7 @@ import {
   IS_WINDOWS,
   IS_MACOS,
   ROCQ_VERSION,
+  DUNE_MAX_CACHE_SIZE,
 } from './constants.js'
 
 function getOpamUrl(): string {
@@ -106,6 +107,15 @@ export async function initializeOpam(): Promise<void> {
   })
 }
 
+export async function configureDune(): Promise<void> {
+  const configPath = path.join(os.homedir(), '.config/dune/config')
+  fs.promises.mkdir(path.dirname(configPath), { recursive: true })
+  await fs.promises.writeFile(
+    configPath,
+    '(lang dune 3.20)\n(display short)\n(cache enabled)\n',
+  )
+}
+
 export async function setupOpam(): Promise<void> {
   await acquireOpam()
   await initializeOpam()
@@ -168,7 +178,7 @@ export async function addRepository(name: string, url: string): Promise<void> {
   ])
 }
 
-export async function setupRepositories(): Promise<void> {
+export async function setupOpamRepositories(): Promise<void> {
   await core.group('Setting up opam repositories', async () => {
     // Always add rocq-released repository
     await addRepository(
@@ -206,6 +216,12 @@ export async function setupRepositories(): Promise<void> {
   })
 }
 
+export async function opamUpdate(): Promise<void> {
+  await core.group('Updating opam repositories', async () => {
+    await exec.exec('opam', ['update', '--development'])
+  })
+}
+
 export async function opamInstall(
   pkg: string,
   options: string[] = [],
@@ -230,10 +246,18 @@ export async function opamPin(
 
 export async function opamList(): Promise<void> {
   await core.group('List installed opam packages', async () => {
-    await exec.exec('opam', ['list', '--installed'])
+    await exec.exec('opam', ['list', '--installed', '--wrap'])
   })
 }
 
 export async function opamClean(): Promise<void> {
-  await exec.exec('opam', ['clean', '--logs', '--switch-cleanup'])
+  await exec.exec('dune', ['cache', 'trim', `--size=${DUNE_MAX_CACHE_SIZE}`])
+  await exec.exec('opam', [
+    'clean',
+    '--all-switches',
+    '--download-cache',
+    '--untracked',
+    '--logs',
+    '--unused-repositories',
+  ])
 }

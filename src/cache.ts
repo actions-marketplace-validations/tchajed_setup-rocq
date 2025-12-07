@@ -1,17 +1,40 @@
 import * as core from '@actions/core'
+import * as glob from '@actions/glob'
 import * as cache from '@actions/cache'
 import * as exec from '@actions/exec'
 import * as path from 'path'
 import * as os from 'os'
 import * as fs from 'fs/promises'
-import { PLATFORM, ARCHITECTURE, ROCQ_VERSION, IS_LINUX } from './constants.js'
+import {
+  PLATFORM,
+  ARCHITECTURE,
+  ROCQ_VERSION,
+  IS_LINUX,
+  State,
+  DUNE_CACHE_ROOT,
+} from './constants.js'
 import { opamClean } from './opam.js'
 import { getRocqWeeklyDir } from './rocq.js'
+import { getMondayDate } from './weekly.js'
 
-export const CACHE_VERSION = 'v1'
+export const CACHE_VERSION = 'v2'
 
-function getCacheKey(): string {
-  return `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}-rocq-${ROCQ_VERSION}`
+const CACHE_PLATFORM_PREFIX = `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}`
+
+function getRocqVersionCacheKey(): string {
+  let cacheKey = `${CACHE_PLATFORM_PREFIX}-rocq-${ROCQ_VERSION}`
+  if (ROCQ_VERSION === 'weekly') {
+    const date = getMondayDate().toISOString().split('T')[0]
+    cacheKey += `-${date}`
+  }
+  return cacheKey
+}
+
+async function getCacheKey(): Promise<string> {
+  let cacheKey = getRocqVersionCacheKey()
+  const depHash = await glob.hashFiles('*.opam')
+  cacheKey += `-${depHash}`
+  return cacheKey
 }
 
 function getOpamRoot(): string {
@@ -23,7 +46,7 @@ function getAptCacheDir(): string {
 }
 
 function getCachePaths(): string[] {
-  const paths = [getOpamRoot()]
+  const paths = [getOpamRoot(), DUNE_CACHE_ROOT]
 
   // For weekly version, also cache the directory with cloned repositories
   if (ROCQ_VERSION === 'weekly') {
@@ -159,50 +182,59 @@ async function restoreAptCache(): Promise<void> {
 }
 
 export async function restoreCache(): Promise<boolean> {
+  if (!cache.isFeatureAvailable()) {
+    core.warning('cache feature is not available, not restoring')
+    return false
+  }
+
   const cachePaths = getCachePaths()
-  const cacheKey = getCacheKey()
+  const cacheKey = await getCacheKey()
+  // remember key used to later save cache
+  core.saveState(State.CachePrimaryKey, cacheKey)
 
   core.info(`Attempting to restore cache with key: ${cacheKey}`)
   core.info(`Cache paths: ${cachePaths.join(', ')}`)
 
   try {
     const restoredKey = await cache.restoreCache(cachePaths, cacheKey, [
-      `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}-`,
+      `${getRocqVersionCacheKey()}-`,
+      `${CACHE_PLATFORM_PREFIX}-`,
     ])
 
     if (restoredKey) {
       core.info(`Cache restored from key: ${restoredKey}`)
+      core.saveState(State.CacheMatchedKey, restoredKey)
       // Restore apt cache to system directories
       await restoreAptCache()
-      // Set a state variable to indicate cache was restored
-      core.saveState('CACHE_RESTORED', 'true')
-      core.saveState('CACHE_KEY', cacheKey)
       return true
     } else {
       core.info('Cache not found')
-      core.saveState('CACHE_RESTORED', 'false')
-      core.saveState('CACHE_KEY', cacheKey)
       return false
     }
   } catch (error) {
     if (error instanceof Error) {
       core.warning(`Failed to restore cache: ${error.message}`)
     }
-    core.saveState('CACHE_RESTORED', 'false')
-    core.saveState('CACHE_KEY', cacheKey)
     return false
   }
 }
 
 export async function saveCache(): Promise<void> {
-  const cacheKey = core.getState('CACHE_KEY')
+  const cacheKey = core.getState(State.CachePrimaryKey)
+  const restoredKey = core.getState(State.CacheMatchedKey)
 
   if (!cacheKey) {
     core.warning('No cache key found, skipping save')
     return
   }
 
+  if (restoredKey === cacheKey) {
+    core.info('Cache matched exactly, skipping save')
+    return
+  }
+
   await opamClean()
+  await fs.mkdir(DUNE_CACHE_ROOT, { recursive: true })
 
   // Copy apt cache from system directories before saving
   await copyAptCache()
@@ -213,15 +245,14 @@ export async function saveCache(): Promise<void> {
   core.info(`Cache paths: ${cachePaths.join(', ')}`)
 
   try {
-    await cache.saveCache(cachePaths, cacheKey)
+    const cacheId = await cache.saveCache(cachePaths, cacheKey)
+    if (cacheId < 0) {
+      return
+    }
     core.info('Cache saved successfully')
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message.includes('already exists')) {
-        core.info('Cache already exists, skipping save')
-      } else {
-        core.warning(`Failed to save cache: ${error.message}`)
-      }
+      core.warning(`Failed to save cache: ${error.message}`)
     }
   }
 }

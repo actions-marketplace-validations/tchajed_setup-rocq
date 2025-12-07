@@ -2,10 +2,11 @@ import * as core from '@actions/core'
 import * as exec from '@actions/exec'
 import * as path from 'path'
 import * as os from 'os'
-import { opamPin, opamInstall } from './opam.js'
+import { opamPin, opamInstall, configureDune } from './opam.js'
+import { getMondayDate } from './weekly.js'
 
 // Get the directory containing weekly rocq clones
-function getRocqWeeklyDir(): string {
+export function getRocqWeeklyDir(): string {
   return path.join(os.homedir(), 'rocq-weekly')
 }
 
@@ -34,31 +35,35 @@ async function cloneOrUpdateRepo(
   } catch {
     // Repository doesn't exist, clone it
     core.info(`Cloning ${repoUrl} to ${repoPath}`)
-    await exec.exec('git', ['clone', '--no-checkout', repoUrl, repoPath])
+    const retCode = await exec.exec(
+      'git',
+      [
+        'clone',
+        '--shallow-since=8.days.ago',
+        '--no-checkout',
+        repoUrl,
+        repoPath,
+      ],
+      {
+        ignoreReturnCode: true,
+      },
+    )
+    if (retCode == 128) {
+      // shallow clones fail if there are no commits in the provided range
+      await exec.exec('git', [
+        'clone',
+        '--depth=10',
+        '--no-checkout',
+        repoUrl,
+        repoPath,
+      ])
+    }
   }
 }
 
 // Get the most recent commit before Monday midnight Central Time
 async function getMondayCommitHash(repoPath: string): Promise<string> {
-  // Get current date/time
-  const now = new Date()
-
-  // Calculate this Monday midnight Central Time
-  const dayOfWeek = now.getUTCDay() // 0 = Sunday, 1 = Monday, etc.
-  const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-  const thisMonday = new Date(now)
-  thisMonday.setUTCDate(now.getUTCDate() + daysToMonday)
-
-  // Set to midnight Central Time (UTC-6 in standard time, UTC-5 in daylight time)
-  // To be safe, we'll use UTC-6 and set to 06:00 UTC which is midnight CT
-  thisMonday.setUTCHours(6, 0, 0, 0)
-
-  // If thisMonday is in the future, go back one week
-  if (thisMonday > now) {
-    thisMonday.setUTCDate(thisMonday.getUTCDate() - 7)
-  }
-
-  const cutoffDate = thisMonday.toISOString()
+  const cutoffDate = getMondayDate().toISOString()
 
   core.info(`Finding commit before Monday midnight CT: ${cutoffDate}`)
 
@@ -73,10 +78,17 @@ async function getMondayCommitHash(repoPath: string): Promise<string> {
     '--format=%H',
   ])
 
-  const commitHash = hashResult.stdout.trim()
+  let commitHash = hashResult.stdout.trim()
 
   if (!commitHash) {
-    throw new Error(`No commit found before ${cutoffDate}`)
+    // no earlier commit; get HEAD commit
+    const headResult = await exec.getExecOutput('git', [
+      '-C',
+      repoPath,
+      'rev-parse',
+      'HEAD',
+    ])
+    commitHash = headResult.stdout.trim()
   }
 
   // Show commit info (date and message)
@@ -114,6 +126,7 @@ async function installRocqWeekly(): Promise<void> {
   // Pin dev packages to specific commits
   await opamPin('rocq-runtime.dev', `git+file://${rocqRepoPath}#${rocqCommit}`)
   await opamPin('rocq-core.dev', `git+file://${rocqRepoPath}#${rocqCommit}`)
+  await opamPin('coqide-server.dev', `git+file://${rocqRepoPath}#${rocqCommit}`)
   await opamPin('coq-core.dev', `git+file://${rocqRepoPath}#${rocqCommit}`)
   await opamPin(
     'coq-stdlib.dev',
@@ -128,17 +141,17 @@ async function installRocqWeekly(): Promise<void> {
 async function installRocqDev(): Promise<void> {
   core.info('Installing Rocq dev version')
 
+  const rocqUrl = 'git+https://github.com/rocq-prover/rocq.git'
+  const stdlibUrl = 'git+https://github.com/rocq-prover/stdlib.git'
+
   // Pin dev packages from git repositories
-  await opamPin(
-    'rocq-runtime.dev',
-    'git+https://github.com/rocq-prover/rocq.git',
-  )
-  await opamPin('rocq-core.dev', 'git+https://github.com/rocq-prover/rocq.git')
-  await opamPin('coq-core.dev', 'git+https://github.com/rocq-prover/rocq.git')
-  await opamPin(
-    'coq-stdlib.dev',
-    'git+https://github.com/rocq-prover/stdlib.git',
-  )
+  await opamPin('rocq-runtime.dev', rocqUrl)
+  await opamPin('rocq-core.dev', rocqUrl)
+  await opamPin('coqide-server.dev', rocqUrl)
+  await opamPin('coq-core.dev', rocqUrl)
+  await opamPin('coq-stdlib.dev', stdlibUrl)
+  // NOTE: this meta package is not in any rocq source repo; only found in rocq
+  // core-dev opam repo
   await opamPin('coq.dev', '--dev-repo')
 
   // Install the pinned packages
@@ -166,8 +179,6 @@ export async function installRocq(version: string): Promise<void> {
     } else {
       await installRocqVersion(version)
     }
+    await configureDune()
   })
 }
-
-// Export the weekly directory path for use in cache.ts
-export { getRocqWeeklyDir }
