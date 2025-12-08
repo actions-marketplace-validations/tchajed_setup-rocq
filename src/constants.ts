@@ -6,6 +6,8 @@ export const OCAML_VERSION = '5.4.0'
 
 export const OPAM_VERSION = '2.5.0'
 
+export const DUNE_VERSION = '3.20.2'
+
 export const ROCQ_VERSION = core.getInput('rocq-version')
 
 export const PLATFORM = os.platform()
@@ -24,6 +26,8 @@ export const DUNE_CACHE_ROOT = (() => {
   }
   return path.join(os.homedir(), '.cache', 'dune')
 })()
+
+export const APT_CACHE_DIR = path.join(os.homedir(), '.apt-cache')
 
 export const GITHUB_TOKEN = process.env.GITHUB_TOKEN || ''
 

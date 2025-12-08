@@ -84962,6 +84962,7 @@ var execExports = requireExec();
 
 const OCAML_VERSION = '5.4.0';
 const OPAM_VERSION = '2.5.0';
+const DUNE_VERSION = '3.20.2';
 const ROCQ_VERSION = coreExports.getInput('rocq-version');
 const PLATFORM = os.platform();
 const ARCHITECTURE = os.arch();
@@ -84975,6 +84976,7 @@ const DUNE_CACHE_ROOT = (() => {
     }
     return path__default.join(os.homedir(), '.cache', 'dune');
 })();
+const APT_CACHE_DIR = path__default.join(os.homedir(), '.apt-cache');
 process.env.GITHUB_TOKEN || '';
 const IS_WINDOWS = PLATFORM === 'win32';
 const IS_MACOS = PLATFORM === 'darwin';
@@ -93285,99 +93287,72 @@ function getOpamUrl() {
     }
 }
 async function acquireOpam() {
-    await coreExports.group('Installing opam', async () => {
-        const cachedPath = toolCacheExports.find('opam', OPAM_VERSION, ARCHITECTURE);
-        const opam = IS_WINDOWS ? 'opam.exe' : 'opam';
-        if (cachedPath === '') {
-            const browserDownloadUrl = getOpamUrl();
-            let downloadedPath;
-            if (IS_WINDOWS) {
-                const zipPath = await toolCacheExports.downloadTool(browserDownloadUrl);
-                const extractedPath = await toolCacheExports.extractZip(zipPath);
-                downloadedPath = path.join(extractedPath, opam);
-            }
-            else {
-                downloadedPath = await toolCacheExports.downloadTool(browserDownloadUrl);
-            }
-            coreExports.info(`Downloaded opam ${OPAM_VERSION} from ${browserDownloadUrl}`);
-            const cachedPath = await toolCacheExports.cacheFile(downloadedPath, opam, 'opam', OPAM_VERSION, ARCHITECTURE);
-            coreExports.info(`Successfully cached opam to ${cachedPath}`);
-            // Make the binary executable on Unix-like systems
-            if (!IS_WINDOWS) {
-                const fs = await import('fs/promises');
-                await fs.chmod(path.join(cachedPath, opam), 0o755);
-            }
-            coreExports.addPath(cachedPath);
-            coreExports.info('Added opam to the path');
+    const cachedPath = toolCacheExports.find('opam', OPAM_VERSION, ARCHITECTURE);
+    const opam = IS_WINDOWS ? 'opam.exe' : 'opam';
+    if (cachedPath === '') {
+        const browserDownloadUrl = getOpamUrl();
+        let downloadedPath;
+        if (IS_WINDOWS) {
+            const zipPath = await toolCacheExports.downloadTool(browserDownloadUrl);
+            const extractedPath = await toolCacheExports.extractZip(zipPath);
+            downloadedPath = path.join(extractedPath, opam);
         }
         else {
-            coreExports.addPath(cachedPath);
-            coreExports.info('Added cached opam to the path');
+            downloadedPath = await toolCacheExports.downloadTool(browserDownloadUrl);
         }
-    });
+        coreExports.info(`Downloaded opam ${OPAM_VERSION} from ${browserDownloadUrl}`);
+        const cachedPath = await toolCacheExports.cacheFile(downloadedPath, opam, 'opam', OPAM_VERSION, ARCHITECTURE);
+        coreExports.info(`Successfully cached opam to ${cachedPath}`);
+        // Make the binary executable on Unix-like systems
+        if (!IS_WINDOWS) {
+            const fs = await import('fs/promises');
+            await fs.chmod(path.join(cachedPath, opam), 0o755);
+        }
+        coreExports.addPath(cachedPath);
+        coreExports.info('Added opam to the path');
+    }
+    else {
+        coreExports.addPath(cachedPath);
+        coreExports.info('Added cached opam to the path');
+    }
 }
 async function initializeOpam() {
-    await coreExports.group('Initialising opam', async () => {
-        // Set environment variables
-        const opamRoot = path.join(os.homedir(), '.opam');
-        if (coreExports.isDebug()) {
-            coreExports.exportVariable('OPAMVERBOSE', 1);
-        }
-        coreExports.exportVariable('OPAMCOLOR', 'always');
-        coreExports.exportVariable('OPAMCONFIRMLEVEL', 'unsafe-yes');
-        coreExports.exportVariable('OPAMDOWNLOADJOBS', os.availableParallelism());
-        coreExports.exportVariable('OPAMERRLOGLEN', 0);
-        coreExports.exportVariable('OPAMEXTERNALSOLVER', 'builtin-0install');
-        coreExports.exportVariable('OPAMPRECISETRACKING', 1);
-        coreExports.exportVariable('OPAMRETRIES', 10);
-        coreExports.exportVariable('OPAMROOT', opamRoot);
-        coreExports.exportVariable('OPAMSOLVERTIMEOUT', 600);
-        coreExports.exportVariable('OPAMYES', 1);
-        coreExports.exportVariable('OPAMROOTISOK', true);
-        if (require$$1$1.existsSync(opamRoot)) {
-            return;
-        }
-        await execExports.exec('opam', [
-            'init',
-            '--bare',
-            '--disable-sandboxing',
-            '--auto-setup',
-            '--enable-shell-hook',
-        ]);
-    });
+    // Set environment variables
+    const opamRoot = path.join(os.homedir(), '.opam');
+    if (coreExports.isDebug()) {
+        coreExports.exportVariable('OPAMVERBOSE', 1);
+    }
+    coreExports.exportVariable('OPAMCOLOR', 'always');
+    coreExports.exportVariable('OPAMDOWNLOADJOBS', os.availableParallelism());
+    coreExports.exportVariable('OPAMERRLOGLEN', 0);
+    coreExports.exportVariable('OPAMEXTERNALSOLVER', 'builtin-0install');
+    coreExports.exportVariable('OPAMPRECISETRACKING', 1);
+    coreExports.exportVariable('OPAMRETRIES', 10);
+    coreExports.exportVariable('OPAMROOT', opamRoot);
+    coreExports.exportVariable('OPAMYES', 1);
+    coreExports.exportVariable('OPAMROOTISOK', true);
+    if (require$$1$1.existsSync(opamRoot)) {
+        coreExports.info('already initialized');
+        return;
+    }
+    await execExports.exec('opam', [
+        'init',
+        '--bare',
+        '--disable-sandboxing',
+        '--auto-setup',
+        '--enable-shell-hook',
+    ]);
 }
-async function configureDune() {
-    const configPath = path.join(os.homedir(), '.config/dune/config');
-    require$$1$1.promises.mkdir(path.dirname(configPath), { recursive: true });
-    await require$$1$1.promises.writeFile(configPath, '(lang dune 3.20)\n(display short)\n(cache enabled)\n');
-}
-async function setupOpam() {
-    await acquireOpam();
-    await initializeOpam();
-}
-async function createSwitch() {
-    await coreExports.group('Installing OCaml', async () => {
-        coreExports.info(`Creating opam switch with OCaml ${OCAML_VERSION}`);
-        await execExports.exec('opam', [
-            'switch',
-            'create',
-            'default',
-            `ocaml-base-compiler.${OCAML_VERSION}`,
-        ]);
-    });
-}
-// Set environment variables specified by `opam env`
+// Set environment variables specified by `opam env`.
+//
+// This has a similar effect to adding `eval $(opam env)` to ~/.profile.
 async function setupOpamEnv() {
-    let output = '';
-    await execExports.exec('opam', ['env'], {
-        listeners: {
-            stdout: (data) => {
-                output += data.toString();
-            },
-        },
+    coreExports.info('setting environment specified by opam env');
+    const output = await execExports.getExecOutput('opam', ['env'], {
+        silent: true,
     });
     // Parse the output and set environment variables
-    const lines = output.split('\n');
+    const lines = output.stdout.split('\n');
     for (const line of lines) {
         // Look for export statements like: export VAR='value'
         const match = line.match(/^(?:export\s+)?([A-Z_]+)='([^']*)'/);
@@ -93396,8 +93371,23 @@ async function setupOpamEnv() {
         }
     }
 }
-async function addRepository(name, url) {
-    coreExports.info(`Adding opam repository: ${name} (${url})`);
+async function setupOpam() {
+    await coreExports.group('Installing opam', async () => {
+        await acquireOpam();
+        await initializeOpam();
+    });
+}
+async function opamSwitchCreate() {
+    await coreExports.group('Installing OCaml', async () => {
+        await execExports.exec('opam', [
+            'switch',
+            'create',
+            'default',
+            `ocaml-base-compiler.${OCAML_VERSION}`,
+        ]);
+    });
+}
+async function opamRepoAdd(name, url) {
     await execExports.exec('opam', [
         'repository',
         'add',
@@ -93410,9 +93400,9 @@ async function addRepository(name, url) {
 async function setupOpamRepositories() {
     await coreExports.group('Setting up opam repositories', async () => {
         // Always add rocq-released repository
-        await addRepository('rocq-released', 'https://rocq-prover.org/opam/released');
+        await opamRepoAdd('rocq-released', 'https://rocq-prover.org/opam/released');
         if (ROCQ_VERSION == 'dev' || ROCQ_VERSION == 'weekly') {
-            await addRepository('rocq-core-dev', 'https://rocq-prover.github.io/opam/core-dev');
+            await opamRepoAdd('rocq-core-dev', 'https://rocq-prover.github.io/opam/core-dev');
         }
         // Add any additional repositories from input
         const opamReposInput = coreExports.getInput('opam-repositories');
@@ -93421,7 +93411,7 @@ async function setupOpamRepositories() {
                 const repositoriesYaml = parse(opamReposInput);
                 const repositories = Object.entries(repositoriesYaml).reverse();
                 for (const [name, url] of repositories) {
-                    await addRepository(name, url);
+                    await opamRepoAdd(name, url);
                 }
             }
             catch (error) {
@@ -93431,6 +93421,11 @@ async function setupOpamRepositories() {
             }
         }
     });
+}
+async function configureDune() {
+    const configPath = path.join(os.homedir(), '.config/dune/config');
+    await require$$1$1.promises.mkdir(path.dirname(configPath), { recursive: true });
+    await require$$1$1.promises.writeFile(configPath, '(lang dune 3.20)\n(display short)\n(cache enabled)\n');
 }
 async function opamUpdate() {
     await coreExports.group('Updating opam repositories', async () => {
@@ -93603,6 +93598,8 @@ async function installRocqVersion(version) {
 }
 async function installRocq(version) {
     await coreExports.group('Installing Rocq', async () => {
+        // install dune: make this explicit and use a fixed version
+        await opamInstall(`dune.${DUNE_VERSION}`);
         if (version === 'dev') {
             await installRocqDev();
         }
@@ -93615,6 +93612,7 @@ async function installRocq(version) {
         else {
             await installRocqVersion(version);
         }
+        await setupOpamEnv();
         await configureDune();
     });
 }
@@ -93638,9 +93636,6 @@ async function getCacheKey() {
 function getOpamRoot() {
     return path.join(os.homedir(), '.opam');
 }
-function getAptCacheDir() {
-    return path.join(os.homedir(), '.apt-cache');
-}
 function getCachePaths() {
     const paths = [getOpamRoot(), DUNE_CACHE_ROOT];
     // For weekly version, also cache the directory with cloned repositories
@@ -93649,7 +93644,7 @@ function getCachePaths() {
     }
     // On Linux, cache apt packages in user-accessible directory
     if (IS_LINUX) {
-        paths.push(getAptCacheDir());
+        paths.push(APT_CACHE_DIR);
     }
     return paths;
 }
@@ -93657,9 +93652,8 @@ async function restoreAptCache() {
     if (!IS_LINUX) {
         return;
     }
-    const aptCacheDir = getAptCacheDir();
-    const archivesDir = path.join(aptCacheDir, 'archives');
-    const listsDir = path.join(aptCacheDir, 'lists');
+    const archivesDir = path.join(APT_CACHE_DIR, 'archives');
+    const listsDir = path.join(APT_CACHE_DIR, 'lists');
     try {
         // Check if cached directories exist
         try {
@@ -93670,7 +93664,9 @@ async function restoreAptCache() {
             return;
         }
         // Ensure /var/cache/apt/archives exists
-        await execExports.exec('sudo', ['mkdir', '-p', '/var/cache/apt/archives']);
+        await execExports.exec('sudo', ['mkdir', '-p', '/var/cache/apt/archives'], {
+            silent: true,
+        });
         // Restore archives
         await execExports.exec('sudo', [
             'cp',
@@ -93679,7 +93675,9 @@ async function restoreAptCache() {
             '/var/cache/apt/archives/',
         ]);
         // Ensure /var/lib/apt/lists exists
-        await execExports.exec('sudo', ['mkdir', '-p', '/var/lib/apt/lists']);
+        await execExports.exec('sudo', ['mkdir', '-p', '/var/lib/apt/lists'], {
+            silent: true,
+        });
         // Restore lists
         await execExports.exec('sudo', [
             'cp',
@@ -93687,7 +93685,6 @@ async function restoreAptCache() {
             listsDir + '/.',
             '/var/lib/apt/lists/',
         ]);
-        coreExports.info('Restored apt cache from user directory');
     }
     catch (error) {
         if (error instanceof Error) {
@@ -93707,12 +93704,15 @@ async function restoreCache() {
     coreExports.info(`Attempting to restore cache with key: ${cacheKey}`);
     coreExports.info(`Cache paths: ${cachePaths.join(', ')}`);
     try {
+        const start = Date.now();
         const restoredKey = await cacheExports.restoreCache(cachePaths, cacheKey, [
             `${getRocqVersionCacheKey()}-`,
             `${CACHE_PLATFORM_PREFIX}-`,
         ]);
+        const elapsedMs = Date.now() - start;
+        const elapsedSec = Math.floor(elapsedMs / 1000);
         if (restoredKey) {
-            coreExports.info(`Cache restored from key: ${restoredKey}`);
+            coreExports.info(`Cache restored from key: ${restoredKey} (took ${elapsedSec}s)`);
             coreExports.saveState(State.CacheMatchedKey, restoredKey);
             // Restore apt cache to system directories
             await restoreAptCache();
@@ -93793,14 +93793,11 @@ async function run() {
         await setupOpam();
         await setupOpamRepositories();
         if (!cacheRestored) {
-            coreExports.info('No cache, initializing');
-            await createSwitch();
+            await opamSwitchCreate();
         }
         else {
-            coreExports.info('Restored from cache');
             await opamUpdate();
         }
-        await setupOpamEnv();
         await opamList();
         // Install Rocq
         await installRocq(ROCQ_VERSION);
