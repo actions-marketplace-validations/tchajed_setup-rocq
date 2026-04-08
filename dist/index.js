@@ -74188,7 +74188,7 @@ function restoreCacheV2(paths_1, primaryKey_1, restoreKeys_1, options_1) {
 
 const OCAML_VERSION = '5.4.0';
 const OPAM_VERSION = '2.5.0';
-const DUNE_VERSION = '3.20.2';
+const DUNE_VERSION = '3.22.1';
 const ROCQ_VERSION = getInput('rocq-version');
 const PLATFORM = os.platform();
 const ARCHITECTURE = os.arch();

@@ -6,7 +6,7 @@ export const OCAML_VERSION = '5.4.0'
 
 export const OPAM_VERSION = '2.5.0'
 
-export const DUNE_VERSION = '3.20.2'
+export const DUNE_VERSION = '3.22.1'
 
 export const ROCQ_VERSION = core.getInput('rocq-version')
 
