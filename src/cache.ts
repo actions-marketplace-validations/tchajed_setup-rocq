@@ -18,7 +18,7 @@ import { opamClean } from './opam.js'
 import { getRocqWeeklyDir } from './rocq.js'
 import { getMondayDate } from './weekly.js'
 
-export const CACHE_VERSION = 'v2'
+export const CACHE_VERSION = 'v3'
 
 const CACHE_PLATFORM_PREFIX = `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}`
 
