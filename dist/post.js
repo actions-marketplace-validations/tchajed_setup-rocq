@@ -77683,6 +77683,100 @@ async function opamClean() {
     ]);
 }
 
+const ROCQ_PACKAGE_PATTERN = /^(?:coq|rocq)(?:[.-]|$)/;
+/**
+ * Extract a balanced bracketed list from opam file contents.
+ *
+ * @param contents Full opam file contents.
+ * @param start Index of the opening `[` that starts the list.
+ * @returns The list contents including the outer brackets, or undefined if the
+ * list is not balanced.
+ */
+function extractList(contents, start) {
+    let depth = 0;
+    let inString = false;
+    for (let i = start; i < contents.length; i++) {
+        const char = contents[i];
+        if (char === '"' && contents[i - 1] !== '\\') {
+            inString = !inString;
+            continue;
+        }
+        if (inString) {
+            continue;
+        }
+        if (char === '[') {
+            depth += 1;
+        }
+        else if (char === ']') {
+            depth -= 1;
+            if (depth === 0) {
+                return contents.slice(start, i + 1);
+            }
+        }
+    }
+}
+/**
+ * Parse Rocq-related pin-depends entries from a single opam file.
+ *
+ * A valid Rocq pin is any `pin-depends` entry whose package name begins with
+ * `coq` or `rocq`.
+ *
+ * @param contents Full opam file contents.
+ * @returns Rocq pin entries found in the file, in file order.
+ */
+function extractRocqPins(contents) {
+    const pins = [];
+    const pinDependsPattern = /pin-depends\s*:/g;
+    let match;
+    while ((match = pinDependsPattern.exec(contents)) !== null) {
+        const listStart = contents.indexOf('[', match.index);
+        if (listStart === -1) {
+            continue;
+        }
+        const list = extractList(contents, listStart);
+        if (!list) {
+            continue;
+        }
+        const pinPattern = /\[\s*"([^"]+)"\s*"([^"]+)"\s*\]/g;
+        let pinMatch;
+        while ((pinMatch = pinPattern.exec(list)) !== null) {
+            const [, pkg, target] = pinMatch;
+            if (ROCQ_PACKAGE_PATTERN.test(pkg)) {
+                pins.push({ pkg, target });
+            }
+        }
+    }
+    return pins;
+}
+/**
+ * Read the opam files matched by `cache-key-opam-files` and collect any
+ * Rocq-related pin-depends entries.
+ *
+ * @returns A sorted list of unique Rocq pins.
+ * @throws If the same Rocq package is pinned to conflicting targets.
+ */
+async function getPinnedRocqPackages() {
+    const cacheKeyFiles = getInput('cache-key-opam-files');
+    if (!cacheKeyFiles.trim()) {
+        return [];
+    }
+    const globber = await create(cacheKeyFiles);
+    const packages = new Map();
+    for await (const file of globber.globGenerator()) {
+        const contents = await fs$1.readFile(file, 'utf8');
+        for (const pin of extractRocqPins(contents)) {
+            const existingTarget = packages.get(pin.pkg);
+            if (existingTarget && existingTarget !== pin.target) {
+                throw new Error(`Conflicting Rocq pin-depends targets found for ${pin.pkg}: ${existingTarget} and ${pin.target}`);
+            }
+            packages.set(pin.pkg, pin.target);
+        }
+    }
+    return [...packages.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([pkg, target]) => ({ pkg, target }));
+}
+
 // Get the directory containing weekly rocq clones
 function getRocqWeeklyDir() {
     return path.join(os.homedir(), 'rocq-weekly');
@@ -77691,10 +77785,11 @@ function getRocqWeeklyDir() {
 function getOpamRoot() {
     return path.join(os.homedir(), '.opam');
 }
-function getCachePaths() {
+async function getCachePaths() {
     const paths = [getOpamRoot(), DUNE_CACHE_ROOT];
+    const pinnedRocqPackages = await getPinnedRocqPackages();
     // For weekly version, also cache the directory with cloned repositories
-    if (ROCQ_VERSION === 'weekly') {
+    if (ROCQ_VERSION === 'weekly' && pinnedRocqPackages.length === 0) {
         paths.push(getRocqWeeklyDir());
     }
     // On Linux, cache apt packages in user-accessible directory
@@ -77780,7 +77875,7 @@ async function saveCache() {
     await fs$1.mkdir(DUNE_CACHE_ROOT, { recursive: true });
     // Copy apt cache from system directories before saving
     await copyAptCache();
-    const cachePaths = getCachePaths();
+    const cachePaths = await getCachePaths();
     info(`Saving cache with key: ${cacheKey}`);
     info(`Cache paths: ${cachePaths.join(', ')}`);
     try {
