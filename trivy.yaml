@@ -1,0 +1,9 @@
+# Trivy configuration, used by super-linter.
+#
+# Skip the bundled action output: it is generated code, and the embedded
+# @azure/storage-blob library contains the well-known public Azurite
+# emulator account key, which Trivy's secret scanner flags as a critical
+# finding.
+scan:
+  skip-dirs:
+    - dist
