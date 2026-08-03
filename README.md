@@ -19,11 +19,15 @@ GitHub action to install Rocq with opam. Supports caching of opam dependencies.
 
 ### Inputs
 
-| Input                  | Description                                                | Required | Default    |
-| ---------------------- | ---------------------------------------------------------- | -------- | ---------- |
-| `rocq-version`         | The version of Rocq to install                             | No       | `latest`   |
-| `opam-repositories`    | Additional opam repositories to add (YAML name:url object) | No       | `''`       |
-| `cache-key-opam-files` | Opam files to hash for the cache key.                      | No       | `'*.opam'` |
+| Input                      | Description                                                 | Required | Default    |
+| -------------------------- | ----------------------------------------------------------- | -------- | ---------- |
+| `rocq-version`             | The version of Rocq to install                              | No       | `latest`   |
+| `ocaml-version`            | The OCaml compiler to create the switch with                | No       | `5.4.0`    |
+| `dune-version`             | The dune version installed before Rocq (a floor)            | No       | `3.22.1`   |
+| `opam-repositories`        | Additional opam repositories to add (YAML name:url object)  | No       | `''`       |
+| `cache-key-opam-files`     | Opam files to hash for the cache key.                       | No       | `'*.opam'` |
+| `save-if`                  | Whether the post step saves a cache (`true`/`false`/`auto`) | No       | `'auto'`   |
+| `strip-binary-annotations` | Delete `.cmt`/`.cmti` from the switch before saving         | No       | `'true'`   |
 
 `rocq-version` supports these special strings, in addition to full Rocq versions
 (as used by `opam install`):
@@ -38,6 +42,104 @@ The Rocq opam repository is always available (the equivalent of running
 `cache-key-opam-files` uses
 [actions/glob](https://www.npmjs.com/package/@actions/glob), which takes
 newline-separated patterns.
+
+`save-if` controls whether the post step writes a cache. GitHub scopes a cache
+to the ref that created it: a cache saved by a `pull_request` run lands under
+`refs/pull/N/merge`, where neither the base branch nor any sibling PR can read
+it. It can only consume the repository's 10GB cache quota and, once that fills,
+evict — least recently used — the branch caches that pull requests do restore
+from. A busy repository can lose its default-branch cache this way and
+cold-start every job from then on, which is both slow and exposed to upstream
+rate limits.
+
+Under the default `auto`, pull request runs restore a cache but do not save one;
+every other event saves as before. Use `true` to always save and `false` to
+never save.
+
+> [!IMPORTANT] If your workflow only runs on pull requests (`on: pull_request`
+> with no `push` trigger), no run will ever be eligible to save under `auto` and
+> your cache will never be populated. Set `save-if: true`, or add a `push`
+> trigger for your default branch.
+
+`strip-binary-annotations` deletes `.cmt` and `.cmti` files from the switch in
+the post step, just before the cache is uploaded. These are OCaml binary
+annotation files: merlin, ocaml-lsp and odoc read them to answer questions about
+source, but nothing involved in _building_ a Rocq project does. They are roughly
+a fifth of the compressed cache, which makes this the largest saving available.
+
+Deleting them does not disturb opam's bookkeeping — opam tracks which packages
+are installed, not a checksum over their files — so an incremental
+`opam install` against the restored switch still sees every package as present.
+
+Set it to `false` if your workflow runs merlin, ocaml-lsp or odoc against the
+restored switch.
+
+If the opam files matched by `cache-key-opam-files` contain `pin-depends`
+entries for Rocq packages, setup-rocq will install that pinned package instead
+of the `rocq-version` input and will include the pin target in the Rocq cache
+key.
+
+`ocaml-version` selects the compiler installed into the switch. The default is
+current enough for every supported Rocq release; set it to a 4.x compiler (for
+example `4.14.2`) when installing a Rocq 8.x version, which cannot be built with
+OCaml 5.
+
+`dune-version` is the dune installed into the switch before Rocq. It is a floor,
+not a pin: a restored switch whose dune already meets it keeps that dune, since
+downgrading dune recompiles every package built with it. Set it when your
+project's own dependencies require a newer dune than the default:
+
+```yaml
+- uses: tchajed/setup-rocq@v1
+  with:
+    rocq-version: '9.2.0'
+    # matches `"dune" {>= "3.23"}` in the project's opam file
+    dune-version: '3.23.1'
+```
+
+Leaving it at the default in that case still works, but every cold run builds
+Rocq twice — once against the default dune, then again after `opam install`
+upgrades dune to satisfy the project. The requested version is part of the cache
+key, so raising it takes effect on the next run rather than being masked by an
+already-cached switch.
+
+### Outputs
+
+| Output               | Description                                              |
+| -------------------- | -------------------------------------------------------- |
+| `cache-hit`          | `'true'` if an opam cache was restored, else `'false'`   |
+| `cache-primary-key`  | The key this run computed and would save under           |
+| `cache-matched-key`  | The key actually restored; empty on a miss               |
+| `rocq-version`       | The Rocq version actually installed, as reported by opam |
+| `ocaml-version`      | The OCaml version installed in the switch                |
+| `opam-switch-prefix` | The prefix of the opam switch Rocq was installed into    |
+
+`rocq-version` is worth reading back when the input was `latest`, `dev`, or
+`weekly`, since in those cases the version is chosen by the opam solver:
+
+```yaml
+- uses: tchajed/setup-rocq@v1
+  id: rocq
+  with:
+    rocq-version: latest
+- run: echo "installed Rocq ${{ steps.rocq.outputs.rocq-version }}"
+```
+
+### Caching
+
+The cache key covers the platform, architecture, OCaml version, opam series,
+requested Rocq version, and a hash of the files matched by
+`cache-key-opam-files`. Changing any of them produces a new key.
+
+Restores also try two shorter prefixes, so a run can reuse an archive built from
+different opam files as long as the platform, compiler and Rocq version agree.
+That means `cache-hit` alone does not identify _which_ archive was restored —
+compare `cache-matched-key` against `cache-primary-key` when that distinction
+matters.
+
+The cache is saved in a post-job step. It is saved even when the job itself
+fails, so a failing build does not throw away a successful Rocq install — but
+only if setup-rocq itself finished, so a half-built switch is never cached.
 
 ### Examples
 

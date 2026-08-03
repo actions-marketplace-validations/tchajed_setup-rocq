@@ -2,9 +2,20 @@ import * as core from '@actions/core'
 import * as exec from '@actions/exec'
 import * as path from 'path'
 import * as os from 'os'
-import { opamPin, opamInstall, configureDune, setupOpamEnv } from './opam.js'
+import {
+  opamPin,
+  opamInstall,
+  opamInstalledVersion,
+  configureDune,
+  setupOpamEnv,
+} from './opam.js'
 import { getMondayDate } from './weekly.js'
 import { DUNE_VERSION } from './constants.js'
+import {
+  getPinnedRocqInstallPackages,
+  getPinnedRocqPackages,
+  type RocqPin,
+} from './rocq-pin.js'
 
 // Get the directory containing weekly rocq clones
 export function getRocqWeeklyDir(): string {
@@ -124,11 +135,23 @@ async function installRocqWeekly(): Promise<void> {
   core.info(`Using rocq commit: ${rocqCommit}`)
   core.info(`Using stdlib commit: ${stdlibCommit}`)
 
-  // Pin dev packages to specific commits
+  // Pin every dev package in the cone to a commit.  rocq-stdlib was the
+  // omission: coq-stdlib was pinned to Monday's stdlib commit while
+  // rocq-stdlib -- the package that actually holds the library -- was
+  // left to resolve from the dev repo, whose branch moves.  So a
+  // "weekly" switch was not pinned to Monday for that package, and the
+  // two stdlib packages could come from different commits.  An unpinned
+  // dev package is also perpetually out of date as far as opam is
+  // concerned, so any dev sync marks it -- and coq-stdlib, which uses
+  // it, and the coq metapackage above that -- for recompilation.
   await opamPin('rocq-runtime.dev', `git+file://${rocqRepoPath}#${rocqCommit}`)
   await opamPin('rocq-core.dev', `git+file://${rocqRepoPath}#${rocqCommit}`)
   await opamPin('coqide-server.dev', `git+file://${rocqRepoPath}#${rocqCommit}`)
   await opamPin('coq-core.dev', `git+file://${rocqRepoPath}#${rocqCommit}`)
+  await opamPin(
+    'rocq-stdlib.dev',
+    `git+file://${stdlibRepoPath}#${stdlibCommit}`,
+  )
   await opamPin(
     'coq-stdlib.dev',
     `git+file://${stdlibRepoPath}#${stdlibCommit}`,
@@ -150,6 +173,7 @@ async function installRocqDev(): Promise<void> {
   await opamPin('rocq-core.dev', rocqUrl)
   await opamPin('coqide-server.dev', rocqUrl)
   await opamPin('coq-core.dev', rocqUrl)
+  await opamPin('rocq-stdlib.dev', stdlibUrl)
   await opamPin('coq-stdlib.dev', stdlibUrl)
   // NOTE: this meta package is not in any rocq source repo; only found in rocq
   // core-dev opam repo
@@ -161,19 +185,119 @@ async function installRocqDev(): Promise<void> {
 
 async function installRocqLatest(): Promise<void> {
   core.info('Installing latest Rocq version')
-  await opamInstall('coq', ['--unset-root'])
+  // the coq compat metapackage lags behind releases (and may stop being
+  // published), so install the real packages instead
+  await opamInstall(['rocq-core', 'rocq-stdlib'], ['--unset-root'])
 }
 
 async function installRocqVersion(version: string): Promise<void> {
   core.info(`Installing Rocq version ${version}`)
-  await opamInstall(`coq.${version}`, ['--unset-root'])
+  if (version.startsWith('8.')) {
+    // rocq-core only exists for 9.0+
+    await opamInstall(`coq.${version}`, ['--unset-root'])
+    return
+  }
+  // rocq-stdlib is versioned independently of rocq-core, so leave it
+  // unconstrained and let the solver pick a compatible version
+  await opamInstall([`rocq-core.${version}`, 'rocq-stdlib'], ['--unset-root'])
+}
+
+async function installPinnedRocq(pins: RocqPin[]): Promise<void> {
+  const installPackages = getPinnedRocqInstallPackages(pins)
+  core.info(
+    `Installing Rocq from pin-depends using ${installPackages.join(', ')} (${pins.length} pinned package${pins.length === 1 ? '' : 's'})`,
+  )
+
+  for (const pin of pins) {
+    await opamPin(pin.pkg, pin.target)
+  }
+
+  await opamInstall(installPackages, ['--unset-root'])
+}
+
+// Compare two dotted-numeric versions.  Returns a negative number if a <
+// b, zero if they are equal, and a positive number if a > b.  Returns
+// null if either is not purely dotted-numeric, which is the caller's
+// signal that it cannot decide.
+export function compareDottedVersions(a: string, b: string): number | null {
+  const parse = (v: string): number[] | null => {
+    const parts = v.split('.')
+    const nums = parts.map((p) => (/^\d+$/.test(p) ? Number(p) : NaN))
+    return nums.some(Number.isNaN) ? null : nums
+  }
+  const av = parse(a)
+  const bv = parse(b)
+  if (av === null || bv === null) {
+    return null
+  }
+  for (let i = 0; i < Math.max(av.length, bv.length); i++) {
+    const diff = (av[i] ?? 0) - (bv[i] ?? 0)
+    if (diff !== 0) {
+      return diff
+    }
+  }
+  return 0
+}
+
+// Install dune, treating DUNE_VERSION as a floor rather than a pin.
+//
+// A restored cache can hold a switch whose dune the project's own
+// `opam install` already upgraded past DUNE_VERSION.  Asking for
+// `dune.DUNE_VERSION` there is a downgrade, and opam responds by
+// recompiling every package that uses dune -- all of Rocq -- twice per
+// run, once down and once back up when the project's dependencies are
+// installed.  It also uninstalls any package whose constraint the older
+// dune violates.  So keep a dune that is already new enough.
+//
+// The floor comes from the `dune-version` input.  Leaving it at the default
+// when the project needs a newer dune is not a correctness problem, but it
+// costs a full rebuild of Rocq on every cold run: Rocq is built here against
+// the default dune, and the project's own `opam install` then upgrades dune,
+// which recompiles everything that uses it.
+export async function installDune(): Promise<void> {
+  const installed = await opamInstalledVersion('dune')
+  if (installed !== null) {
+    const cmp = compareDottedVersions(installed, DUNE_VERSION)
+    if (cmp !== null && cmp >= 0) {
+      core.info(
+        `dune ${installed} is already installed and is at least ${DUNE_VERSION}; keeping it`,
+      )
+      return
+    }
+  }
+  await opamInstall(`dune.${DUNE_VERSION}`)
+}
+
+// Packages that carry a Rocq release's version number, most specific first.
+// rocq-core is the root of the post-rename package graph; coq is the compat
+// metapackage still used by the 8.x line and by dev/weekly pins.
+const ROCQ_VERSION_PACKAGES = ['rocq-core', 'coq', 'coq-core']
+
+// The Rocq version actually present in the switch after installation.  This is
+// what the resolver picked, which for `latest`, `dev`, and a partial version
+// input is not something the caller can predict.  Returns null if no known
+// Rocq package is installed.
+export async function getInstalledRocqVersion(): Promise<string | null> {
+  for (const pkg of ROCQ_VERSION_PACKAGES) {
+    const version = await opamInstalledVersion(pkg)
+    if (version !== null) {
+      return version
+    }
+  }
+  return null
 }
 
 export async function installRocq(version: string): Promise<void> {
   await core.group('Installing Rocq', async () => {
-    // install dune: make this explicit and use a fixed version
-    await opamInstall(`dune.${DUNE_VERSION}`)
-    if (version === 'dev') {
+    // Configure dune before anything is built, not after: Rocq itself is a
+    // dune project, so a cache-enabled config written first lets the Rocq
+    // build populate the dune cache that the post action saves.
+    await configureDune()
+    await installDune()
+    const pinnedRocqPackages = await getPinnedRocqPackages()
+    if (pinnedRocqPackages.length > 0) {
+      await installPinnedRocq(pinnedRocqPackages)
+    } else if (version === 'dev') {
       await installRocqDev()
     } else if (version === 'weekly') {
       await installRocqWeekly()
@@ -183,6 +307,5 @@ export async function installRocq(version: string): Promise<void> {
       await installRocqVersion(version)
     }
     await setupOpamEnv()
-    await configureDune()
   })
 }

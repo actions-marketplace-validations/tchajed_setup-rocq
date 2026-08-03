@@ -1,9 +1,10 @@
 import * as os from 'os';
 import os__default from 'os';
 import * as crypto$1 from 'crypto';
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import { promises, existsSync } from 'fs';
-import * as path from 'path';
+import * as path$1 from 'path';
 import path__default from 'path';
 import * as http from 'http';
 import http__default from 'http';
@@ -30,7 +31,7 @@ import zlib from 'node:zlib';
 import require$$5$1 from 'node:perf_hooks';
 import require$$8$1 from 'node:util/types';
 import require$$1$1 from 'node:worker_threads';
-import require$$1$2 from 'node:url';
+import require$$1$2, { fileURLToPath } from 'node:url';
 import require$$5$2 from 'node:async_hooks';
 import require$$1$3 from 'node:console';
 import require$$1$4 from 'node:dns';
@@ -42,11 +43,13 @@ import { Readable } from 'stream';
 import require$$5$4, { URL as URL$1 } from 'url';
 import * as buffer from 'buffer';
 import { Buffer as Buffer$1 } from 'buffer';
+import { createRequire } from 'node:module';
+import { dirname as dirname$1 } from 'node:path';
 import os$1, { EOL as EOL$1 } from 'node:os';
 import process$1 from 'node:process';
 import https$1 from 'node:https';
-import require$$1$5 from 'tty';
 import { createHmac } from 'node:crypto';
+import require$$1$5 from 'tty';
 import fs$2 from 'node:fs';
 import * as fs$1 from 'fs/promises';
 
@@ -1046,6 +1049,24 @@ function requireErrors () {
 	  [kSecureProxyConnectionError] = true
 	}
 
+	const kMessageSizeExceededError = Symbol.for('undici.error.UND_ERR_WS_MESSAGE_SIZE_EXCEEDED');
+	class MessageSizeExceededError extends UndiciError {
+	  constructor (message) {
+	    super(message);
+	    this.name = 'MessageSizeExceededError';
+	    this.message = message || 'Max decompressed message size exceeded';
+	    this.code = 'UND_ERR_WS_MESSAGE_SIZE_EXCEEDED';
+	  }
+
+	  static [Symbol.hasInstance] (instance) {
+	    return instance && instance[kMessageSizeExceededError] === true
+	  }
+
+	  get [kMessageSizeExceededError] () {
+	    return true
+	  }
+	}
+
 	errors = {
 	  AbortError,
 	  HTTPParserError,
@@ -1069,7 +1090,8 @@ function requireErrors () {
 	  ResponseExceededMaxSizeError,
 	  RequestRetryError,
 	  ResponseError,
-	  SecureProxyConnectionError
+	  SecureProxyConnectionError,
+	  MessageSizeExceededError
 	};
 	return errors;
 }
@@ -2370,6 +2392,10 @@ function requireRequest$1 () {
 	      throw new InvalidArgumentError('upgrade must be a string')
 	    }
 
+	    if (upgrade && !isValidHeaderValue(upgrade)) {
+	      throw new InvalidArgumentError('invalid upgrade header')
+	    }
+
 	    if (headersTimeout != null && (!Number.isFinite(headersTimeout) || headersTimeout < 0)) {
 	      throw new InvalidArgumentError('invalid headersTimeout')
 	    }
@@ -2664,13 +2690,19 @@ function requireRequest$1 () {
 	    val = `${val}`;
 	  }
 
-	  if (request.host === null && headerName === 'host') {
+	  if (headerName === 'host') {
+	    if (request.host !== null) {
+	      throw new InvalidArgumentError('duplicate host header')
+	    }
 	    if (typeof val !== 'string') {
 	      throw new InvalidArgumentError('invalid host header')
 	    }
 	    // Consumed by Client
 	    request.host = val;
-	  } else if (request.contentLength === null && headerName === 'content-length') {
+	  } else if (headerName === 'content-length') {
+	    if (request.contentLength !== null) {
+	      throw new InvalidArgumentError('duplicate content-length header')
+	    }
 	    request.contentLength = parseInt(val, 10);
 	    if (!Number.isFinite(request.contentLength)) {
 	      throw new InvalidArgumentError('invalid content-length header')
@@ -2791,15 +2823,24 @@ function requireDispatcherBase () {
 	const kOnDestroyed = Symbol('onDestroyed');
 	const kOnClosed = Symbol('onClosed');
 	const kInterceptedDispatch = Symbol('Intercepted Dispatch');
+	const kWebSocketOptions = Symbol('webSocketOptions');
 
 	class DispatcherBase extends Dispatcher {
-	  constructor () {
+	  constructor (opts) {
 	    super();
 
 	    this[kDestroyed] = false;
 	    this[kOnDestroyed] = null;
 	    this[kClosed] = false;
 	    this[kOnClosed] = [];
+	    this[kWebSocketOptions] = opts?.webSocket ?? {};
+	  }
+
+	  get webSocketOptions () {
+	    return {
+	      maxFragments: this[kWebSocketOptions].maxFragments ?? 131072,
+	      maxPayloadSize: this[kWebSocketOptions].maxPayloadSize ?? 128 * 1024 * 1024
+	    }
 	  }
 
 	  get destroyed () {
@@ -3681,9 +3722,9 @@ var hasRequiredConstants$4;
 function requireConstants$4 () {
 	if (hasRequiredConstants$4) return constants$4;
 	hasRequiredConstants$4 = 1;
-	(function (exports$1) {
-		Object.defineProperty(exports$1, "__esModule", { value: true });
-		exports$1.SPECIAL_HEADERS = exports$1.HEADER_STATE = exports$1.MINOR = exports$1.MAJOR = exports$1.CONNECTION_TOKEN_CHARS = exports$1.HEADER_CHARS = exports$1.TOKEN = exports$1.STRICT_TOKEN = exports$1.HEX = exports$1.URL_CHAR = exports$1.STRICT_URL_CHAR = exports$1.USERINFO_CHARS = exports$1.MARK = exports$1.ALPHANUM = exports$1.NUM = exports$1.HEX_MAP = exports$1.NUM_MAP = exports$1.ALPHA = exports$1.FINISH = exports$1.H_METHOD_MAP = exports$1.METHOD_MAP = exports$1.METHODS_RTSP = exports$1.METHODS_ICE = exports$1.METHODS_HTTP = exports$1.METHODS = exports$1.LENIENT_FLAGS = exports$1.FLAGS = exports$1.TYPE = exports$1.ERROR = void 0;
+	(function (exports) {
+		Object.defineProperty(exports, "__esModule", { value: true });
+		exports.SPECIAL_HEADERS = exports.HEADER_STATE = exports.MINOR = exports.MAJOR = exports.CONNECTION_TOKEN_CHARS = exports.HEADER_CHARS = exports.TOKEN = exports.STRICT_TOKEN = exports.HEX = exports.URL_CHAR = exports.STRICT_URL_CHAR = exports.USERINFO_CHARS = exports.MARK = exports.ALPHANUM = exports.NUM = exports.HEX_MAP = exports.NUM_MAP = exports.ALPHA = exports.FINISH = exports.H_METHOD_MAP = exports.METHOD_MAP = exports.METHODS_RTSP = exports.METHODS_ICE = exports.METHODS_HTTP = exports.METHODS = exports.LENIENT_FLAGS = exports.FLAGS = exports.TYPE = exports.ERROR = void 0;
 		const utils_1 = requireUtils();
 		(function (ERROR) {
 		    ERROR[ERROR["OK"] = 0] = "OK";
@@ -3711,12 +3752,12 @@ function requireConstants$4 () {
 		    ERROR[ERROR["PAUSED_UPGRADE"] = 22] = "PAUSED_UPGRADE";
 		    ERROR[ERROR["PAUSED_H2_UPGRADE"] = 23] = "PAUSED_H2_UPGRADE";
 		    ERROR[ERROR["USER"] = 24] = "USER";
-		})(exports$1.ERROR || (exports$1.ERROR = {}));
+		})(exports.ERROR || (exports.ERROR = {}));
 		(function (TYPE) {
 		    TYPE[TYPE["BOTH"] = 0] = "BOTH";
 		    TYPE[TYPE["REQUEST"] = 1] = "REQUEST";
 		    TYPE[TYPE["RESPONSE"] = 2] = "RESPONSE";
-		})(exports$1.TYPE || (exports$1.TYPE = {}));
+		})(exports.TYPE || (exports.TYPE = {}));
 		(function (FLAGS) {
 		    FLAGS[FLAGS["CONNECTION_KEEP_ALIVE"] = 1] = "CONNECTION_KEEP_ALIVE";
 		    FLAGS[FLAGS["CONNECTION_CLOSE"] = 2] = "CONNECTION_CLOSE";
@@ -3728,12 +3769,12 @@ function requireConstants$4 () {
 		    FLAGS[FLAGS["TRAILING"] = 128] = "TRAILING";
 		    // 1 << 8 is unused
 		    FLAGS[FLAGS["TRANSFER_ENCODING"] = 512] = "TRANSFER_ENCODING";
-		})(exports$1.FLAGS || (exports$1.FLAGS = {}));
+		})(exports.FLAGS || (exports.FLAGS = {}));
 		(function (LENIENT_FLAGS) {
 		    LENIENT_FLAGS[LENIENT_FLAGS["HEADERS"] = 1] = "HEADERS";
 		    LENIENT_FLAGS[LENIENT_FLAGS["CHUNKED_LENGTH"] = 2] = "CHUNKED_LENGTH";
 		    LENIENT_FLAGS[LENIENT_FLAGS["KEEP_ALIVE"] = 4] = "KEEP_ALIVE";
-		})(exports$1.LENIENT_FLAGS || (exports$1.LENIENT_FLAGS = {}));
+		})(exports.LENIENT_FLAGS || (exports.LENIENT_FLAGS = {}));
 		var METHODS;
 		(function (METHODS) {
 		    METHODS[METHODS["DELETE"] = 0] = "DELETE";
@@ -3793,8 +3834,8 @@ function requireConstants$4 () {
 		    METHODS[METHODS["RECORD"] = 44] = "RECORD";
 		    /* RAOP */
 		    METHODS[METHODS["FLUSH"] = 45] = "FLUSH";
-		})(METHODS = exports$1.METHODS || (exports$1.METHODS = {}));
-		exports$1.METHODS_HTTP = [
+		})(METHODS = exports.METHODS || (exports.METHODS = {}));
+		exports.METHODS_HTTP = [
 		    METHODS.DELETE,
 		    METHODS.GET,
 		    METHODS.HEAD,
@@ -3832,10 +3873,10 @@ function requireConstants$4 () {
 		    // TODO(indutny): should we allow it with HTTP?
 		    METHODS.SOURCE,
 		];
-		exports$1.METHODS_ICE = [
+		exports.METHODS_ICE = [
 		    METHODS.SOURCE,
 		];
-		exports$1.METHODS_RTSP = [
+		exports.METHODS_RTSP = [
 		    METHODS.OPTIONS,
 		    METHODS.DESCRIBE,
 		    METHODS.ANNOUNCE,
@@ -3852,59 +3893,59 @@ function requireConstants$4 () {
 		    METHODS.GET,
 		    METHODS.POST,
 		];
-		exports$1.METHOD_MAP = utils_1.enumToMap(METHODS);
-		exports$1.H_METHOD_MAP = {};
-		Object.keys(exports$1.METHOD_MAP).forEach((key) => {
+		exports.METHOD_MAP = utils_1.enumToMap(METHODS);
+		exports.H_METHOD_MAP = {};
+		Object.keys(exports.METHOD_MAP).forEach((key) => {
 		    if (/^H/.test(key)) {
-		        exports$1.H_METHOD_MAP[key] = exports$1.METHOD_MAP[key];
+		        exports.H_METHOD_MAP[key] = exports.METHOD_MAP[key];
 		    }
 		});
 		(function (FINISH) {
 		    FINISH[FINISH["SAFE"] = 0] = "SAFE";
 		    FINISH[FINISH["SAFE_WITH_CB"] = 1] = "SAFE_WITH_CB";
 		    FINISH[FINISH["UNSAFE"] = 2] = "UNSAFE";
-		})(exports$1.FINISH || (exports$1.FINISH = {}));
-		exports$1.ALPHA = [];
+		})(exports.FINISH || (exports.FINISH = {}));
+		exports.ALPHA = [];
 		for (let i = 'A'.charCodeAt(0); i <= 'Z'.charCodeAt(0); i++) {
 		    // Upper case
-		    exports$1.ALPHA.push(String.fromCharCode(i));
+		    exports.ALPHA.push(String.fromCharCode(i));
 		    // Lower case
-		    exports$1.ALPHA.push(String.fromCharCode(i + 0x20));
+		    exports.ALPHA.push(String.fromCharCode(i + 0x20));
 		}
-		exports$1.NUM_MAP = {
+		exports.NUM_MAP = {
 		    0: 0, 1: 1, 2: 2, 3: 3, 4: 4,
 		    5: 5, 6: 6, 7: 7, 8: 8, 9: 9,
 		};
-		exports$1.HEX_MAP = {
+		exports.HEX_MAP = {
 		    0: 0, 1: 1, 2: 2, 3: 3, 4: 4,
 		    5: 5, 6: 6, 7: 7, 8: 8, 9: 9,
 		    A: 0XA, B: 0XB, C: 0XC, D: 0XD, E: 0XE, F: 0XF,
 		    a: 0xa, b: 0xb, c: 0xc, d: 0xd, e: 0xe, f: 0xf,
 		};
-		exports$1.NUM = [
+		exports.NUM = [
 		    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
 		];
-		exports$1.ALPHANUM = exports$1.ALPHA.concat(exports$1.NUM);
-		exports$1.MARK = ['-', '_', '.', '!', '~', '*', '\'', '(', ')'];
-		exports$1.USERINFO_CHARS = exports$1.ALPHANUM
-		    .concat(exports$1.MARK)
+		exports.ALPHANUM = exports.ALPHA.concat(exports.NUM);
+		exports.MARK = ['-', '_', '.', '!', '~', '*', '\'', '(', ')'];
+		exports.USERINFO_CHARS = exports.ALPHANUM
+		    .concat(exports.MARK)
 		    .concat(['%', ';', ':', '&', '=', '+', '$', ',']);
 		// TODO(indutny): use RFC
-		exports$1.STRICT_URL_CHAR = [
+		exports.STRICT_URL_CHAR = [
 		    '!', '"', '$', '%', '&', '\'',
 		    '(', ')', '*', '+', ',', '-', '.', '/',
 		    ':', ';', '<', '=', '>',
 		    '@', '[', '\\', ']', '^', '_',
 		    '`',
 		    '{', '|', '}', '~',
-		].concat(exports$1.ALPHANUM);
-		exports$1.URL_CHAR = exports$1.STRICT_URL_CHAR
+		].concat(exports.ALPHANUM);
+		exports.URL_CHAR = exports.STRICT_URL_CHAR
 		    .concat(['\t', '\f']);
 		// All characters with 0x80 bit set to 1
 		for (let i = 0x80; i <= 0xff; i++) {
-		    exports$1.URL_CHAR.push(i);
+		    exports.URL_CHAR.push(i);
 		}
-		exports$1.HEX = exports$1.NUM.concat(['a', 'b', 'c', 'd', 'e', 'f', 'A', 'B', 'C', 'D', 'E', 'F']);
+		exports.HEX = exports.NUM.concat(['a', 'b', 'c', 'd', 'e', 'f', 'A', 'B', 'C', 'D', 'E', 'F']);
 		/* Tokens as defined by rfc 2616. Also lowercases them.
 		 *        token       = 1*<any CHAR except CTLs or separators>
 		 *     separators     = "(" | ")" | "<" | ">" | "@"
@@ -3912,27 +3953,27 @@ function requireConstants$4 () {
 		 *                    | "/" | "[" | "]" | "?" | "="
 		 *                    | "{" | "}" | SP | HT
 		 */
-		exports$1.STRICT_TOKEN = [
+		exports.STRICT_TOKEN = [
 		    '!', '#', '$', '%', '&', '\'',
 		    '*', '+', '-', '.',
 		    '^', '_', '`',
 		    '|', '~',
-		].concat(exports$1.ALPHANUM);
-		exports$1.TOKEN = exports$1.STRICT_TOKEN.concat([' ']);
+		].concat(exports.ALPHANUM);
+		exports.TOKEN = exports.STRICT_TOKEN.concat([' ']);
 		/*
 		 * Verify that a char is a valid visible (printable) US-ASCII
 		 * character or %x80-FF
 		 */
-		exports$1.HEADER_CHARS = ['\t'];
+		exports.HEADER_CHARS = ['\t'];
 		for (let i = 32; i <= 255; i++) {
 		    if (i !== 127) {
-		        exports$1.HEADER_CHARS.push(i);
+		        exports.HEADER_CHARS.push(i);
 		    }
 		}
 		// ',' = \x44
-		exports$1.CONNECTION_TOKEN_CHARS = exports$1.HEADER_CHARS.filter((c) => c !== 44);
-		exports$1.MAJOR = exports$1.NUM_MAP;
-		exports$1.MINOR = exports$1.MAJOR;
+		exports.CONNECTION_TOKEN_CHARS = exports.HEADER_CHARS.filter((c) => c !== 44);
+		exports.MAJOR = exports.NUM_MAP;
+		exports.MINOR = exports.MAJOR;
 		var HEADER_STATE;
 		(function (HEADER_STATE) {
 		    HEADER_STATE[HEADER_STATE["GENERAL"] = 0] = "GENERAL";
@@ -3944,8 +3985,8 @@ function requireConstants$4 () {
 		    HEADER_STATE[HEADER_STATE["CONNECTION_CLOSE"] = 6] = "CONNECTION_CLOSE";
 		    HEADER_STATE[HEADER_STATE["CONNECTION_UPGRADE"] = 7] = "CONNECTION_UPGRADE";
 		    HEADER_STATE[HEADER_STATE["TRANSFER_ENCODING_CHUNKED"] = 8] = "TRANSFER_ENCODING_CHUNKED";
-		})(HEADER_STATE = exports$1.HEADER_STATE || (exports$1.HEADER_STATE = {}));
-		exports$1.SPECIAL_HEADERS = {
+		})(HEADER_STATE = exports.HEADER_STATE || (exports.HEADER_STATE = {}));
+		exports.SPECIAL_HEADERS = {
 		    'connection': HEADER_STATE.CONNECTION,
 		    'content-length': HEADER_STATE.CONTENT_LENGTH,
 		    'proxy-connection': HEADER_STATE.CONNECTION,
@@ -8749,6 +8790,9 @@ function requireClientH1 () {
 	const FastBuffer = Buffer[Symbol.species];
 	const addListener = util.addListener;
 	const removeAllListeners = util.removeAllListeners;
+	const kIdleSocketValidation = Symbol('kIdleSocketValidation');
+	const kIdleSocketValidationTimeout = Symbol('kIdleSocketValidationTimeout');
+	const kSocketUsed = Symbol('kSocketUsed');
 
 	let extractBody;
 
@@ -8836,10 +8880,10 @@ function requireClientH1 () {
 	const TIMEOUT_KEEP_ALIVE = 8 | USE_NATIVE_TIMER;
 
 	class Parser {
-	  constructor (client, socket, { exports: exports$1 }) {
+	  constructor (client, socket, { exports }) {
 	    assert(Number.isFinite(client[kMaxHeadersSize]) && client[kMaxHeadersSize] > 0);
 
-	    this.llhttp = exports$1;
+	    this.llhttp = exports;
 	    this.ptr = this.llhttp.llhttp_alloc(constants.TYPE.RESPONSE);
 	    this.client = client;
 	    this.socket = socket;
@@ -8971,27 +9015,69 @@ function requireClientH1 () {
 
 	      const offset = llhttp.llhttp_get_error_pos(this.ptr) - currentBufferPtr;
 
-	      if (ret === constants.ERROR.PAUSED_UPGRADE) {
-	        this.onUpgrade(data.slice(offset));
-	      } else if (ret === constants.ERROR.PAUSED) {
-	        this.paused = true;
-	        socket.unshift(data.slice(offset));
-	      } else if (ret !== constants.ERROR.OK) {
-	        const ptr = llhttp.llhttp_get_error_reason(this.ptr);
-	        let message = '';
-	        /* istanbul ignore else: difficult to make a test case for */
-	        if (ptr) {
-	          const len = new Uint8Array(llhttp.memory.buffer, ptr).indexOf(0);
-	          message =
-	            'Response does not match the HTTP/1.1 protocol (' +
-	            Buffer.from(llhttp.memory.buffer, ptr, len).toString() +
-	            ')';
+	      if (ret !== constants.ERROR.OK) {
+	        const body = data.subarray(offset);
+
+	        if (ret === constants.ERROR.PAUSED_UPGRADE) {
+	          this.onUpgrade(body);
+	        } else if (ret === constants.ERROR.PAUSED) {
+	          this.paused = true;
+	          socket.unshift(body);
+	        } else {
+	          throw this.createError(ret, body)
 	        }
-	        throw new HTTPParserError(message, constants.ERROR[ret], data.slice(offset))
 	      }
 	    } catch (err) {
 	      util.destroy(socket, err);
 	    }
+	  }
+
+	  finish () {
+	    assert(currentParser === null);
+	    assert(this.ptr != null);
+	    assert(!this.paused);
+
+	    const { llhttp } = this;
+
+	    let ret;
+
+	    try {
+	      currentParser = this;
+	      ret = llhttp.llhttp_finish(this.ptr);
+	    } finally {
+	      currentParser = null;
+	    }
+
+	    if (ret === constants.ERROR.OK) {
+	      return null
+	    }
+
+	    if (ret === constants.ERROR.PAUSED || ret === constants.ERROR.PAUSED_UPGRADE) {
+	      this.paused = true;
+	      return null
+	    }
+
+	    return this.createError(ret, EMPTY_BUF)
+	  }
+
+	  createError (ret, data) {
+	    const { llhttp, contentLength, bytesRead } = this;
+
+	    if (contentLength && bytesRead !== parseInt(contentLength, 10)) {
+	      return new ResponseContentLengthMismatchError()
+	    }
+
+	    const ptr = llhttp.llhttp_get_error_reason(this.ptr);
+	    let message = '';
+	    if (ptr) {
+	      const len = new Uint8Array(llhttp.memory.buffer, ptr).indexOf(0);
+	      message =
+	        'Response does not match the HTTP/1.1 protocol (' +
+	        Buffer.from(llhttp.memory.buffer, ptr, len).toString() +
+	        ')';
+	    }
+
+	    return new HTTPParserError(message, constants.ERROR[ret], data)
 	  }
 
 	  destroy () {
@@ -9018,6 +9104,11 @@ function requireClientH1 () {
 
 	    /* istanbul ignore next: difficult to make a test case for */
 	    if (socket.destroyed) {
+	      return -1
+	    }
+
+	    if (client[kRunning] === 0) {
+	      util.destroy(socket, new SocketError('bad response', util.getSocketInfo(socket)));
 	      return -1
 	    }
 
@@ -9121,6 +9212,11 @@ function requireClientH1 () {
 
 	    /* istanbul ignore next: difficult to make a test case for */
 	    if (socket.destroyed) {
+	      return -1
+	    }
+
+	    if (client[kRunning] === 0) {
+	      util.destroy(socket, new SocketError('bad response', util.getSocketInfo(socket)));
 	      return -1
 	    }
 
@@ -9297,6 +9393,7 @@ function requireClientH1 () {
 	    request.onComplete(headers);
 
 	    client[kQueue][client[kRunningIdx]++] = null;
+	    socket[kSocketUsed] = true;
 
 	    if (socket[kWriting]) {
 	      assert(client[kRunning] === 0);
@@ -9355,6 +9452,9 @@ function requireClientH1 () {
 	  socket[kWriting] = false;
 	  socket[kReset] = false;
 	  socket[kBlocking] = false;
+	  socket[kIdleSocketValidation] = 0;
+	  socket[kIdleSocketValidationTimeout] = null;
+	  socket[kSocketUsed] = false;
 	  socket[kParser] = new Parser(client, socket, llhttpInstance);
 
 	  addListener(socket, 'error', function (err) {
@@ -9365,8 +9465,11 @@ function requireClientH1 () {
 	    // On Mac OS, we get an ECONNRESET even if there is a full body to be forwarded
 	    // to the user.
 	    if (err.code === 'ECONNRESET' && parser.statusCode && !parser.shouldKeepAlive) {
-	      // We treat all incoming data so for as a valid response.
-	      parser.onMessageComplete();
+	      const parserErr = parser.finish();
+	      if (parserErr) {
+	        this[kError] = parserErr;
+	        this[kClient][kOnError](parserErr);
+	      }
 	      return
 	    }
 
@@ -9385,8 +9488,10 @@ function requireClientH1 () {
 	    const parser = this[kParser];
 
 	    if (parser.statusCode && !parser.shouldKeepAlive) {
-	      // We treat all incoming data so far as a valid response.
-	      parser.onMessageComplete();
+	      const parserErr = parser.finish();
+	      if (parserErr) {
+	        util.destroy(this, parserErr);
+	      }
 	      return
 	    }
 
@@ -9396,10 +9501,11 @@ function requireClientH1 () {
 	    const client = this[kClient];
 	    const parser = this[kParser];
 
+	    clearIdleSocketValidation(this);
+
 	    if (parser) {
 	      if (!this[kError] && parser.statusCode && !parser.shouldKeepAlive) {
-	        // We treat all incoming data so far as a valid response.
-	        parser.onMessageComplete();
+	        this[kError] = parser.finish() || this[kError];
 	      }
 
 	      this[kParser].destroy();
@@ -9462,7 +9568,7 @@ function requireClientH1 () {
 	      return socket.destroyed
 	    },
 	    busy (request) {
-	      if (socket[kWriting] || socket[kReset] || socket[kBlocking]) {
+	      if (socket[kWriting] || socket[kReset] || socket[kBlocking] || socket[kIdleSocketValidation] === 1) {
 	        return true
 	      }
 
@@ -9500,6 +9606,31 @@ function requireClientH1 () {
 	  }
 	}
 
+	function clearIdleSocketValidation (socket) {
+	  if (socket[kIdleSocketValidationTimeout]) {
+	    clearTimeout(socket[kIdleSocketValidationTimeout]);
+	    socket[kIdleSocketValidationTimeout] = null;
+	  }
+
+	  socket[kIdleSocketValidation] = 0;
+	}
+
+	function scheduleIdleSocketValidation (client, socket) {
+	  socket[kIdleSocketValidation] = 1;
+	  socket[kIdleSocketValidationTimeout] = setTimeout(() => {
+	    socket[kIdleSocketValidationTimeout] = null;
+	    socket[kIdleSocketValidation] = 2;
+
+	    if (client[kSocket] === socket && !socket.destroyed) {
+	      client[kResume]();
+	    }
+	  }, 0);
+	  socket[kIdleSocketValidationTimeout].unref?.();
+	}
+
+	/**
+	 * @param {import('./client.js')} client
+	 */
 	function resumeH1 (client) {
 	  const socket = client[kSocket];
 
@@ -9512,6 +9643,32 @@ function requireClientH1 () {
 	    } else if (socket[kNoRef] && socket.ref) {
 	      socket.ref();
 	      socket[kNoRef] = false;
+	    }
+
+	    if (client[kRunning] === 0 && client[kPending] > 0 && socket[kSocketUsed]) {
+	      if (socket[kIdleSocketValidation] === 0) {
+	        scheduleIdleSocketValidation(client, socket);
+	        socket[kParser].readMore();
+	        if (socket.destroyed) {
+	          return
+	        }
+	        return
+	      }
+
+	      if (socket[kIdleSocketValidation] === 1) {
+	        socket[kParser].readMore();
+	        if (socket.destroyed) {
+	          return
+	        }
+	        return
+	      }
+	    }
+
+	    if (client[kRunning] === 0) {
+	      socket[kParser].readMore();
+	      if (socket.destroyed) {
+	        return
+	      }
 	    }
 
 	    if (client[kSize] === 0) {
@@ -9607,6 +9764,7 @@ function requireClientH1 () {
 	  }
 
 	  const socket = client[kSocket];
+	  clearIdleSocketValidation(socket);
 
 	  const abort = (err) => {
 	    if (request.aborted || request.completed) {
@@ -11177,9 +11335,10 @@ function requireClient () {
 	    autoSelectFamilyAttemptTimeout,
 	    // h2
 	    maxConcurrentStreams,
-	    allowH2
+	    allowH2,
+	    webSocket
 	  } = {}) {
-	    super();
+	    super({ webSocket });
 
 	    if (keepAlive !== undefined) {
 	      throw new InvalidArgumentError('unsupported keepAlive, use pipelining=0 instead')
@@ -11886,8 +12045,8 @@ function requirePoolBase () {
 	const kStats = Symbol('stats');
 
 	class PoolBase extends DispatcherBase {
-	  constructor () {
-	    super();
+	  constructor (opts) {
+	    super(opts);
 
 	    this[kQueue] = new FixedQueue();
 	    this[kClients] = [];
@@ -12106,8 +12265,6 @@ function requirePool () {
 	    allowH2,
 	    ...options
 	  } = {}) {
-	    super();
-
 	    if (connections != null && (!Number.isFinite(connections) || connections < 0)) {
 	      throw new InvalidArgumentError('invalid connections')
 	    }
@@ -12131,6 +12288,8 @@ function requirePool () {
 	        ...connect
 	      });
 	    }
+
+	    super(options);
 
 	    this[kInterceptors] = options.interceptors?.Pool && Array.isArray(options.interceptors.Pool)
 	      ? options.interceptors.Pool
@@ -12425,8 +12584,6 @@ function requireAgent () {
 
 	class Agent extends DispatcherBase {
 	  constructor ({ factory = defaultFactory, maxRedirections = 0, connect, ...options } = {}) {
-	    super();
-
 	    if (typeof factory !== 'function') {
 	      throw new InvalidArgumentError('factory must be a function.')
 	    }
@@ -12438,6 +12595,8 @@ function requireAgent () {
 	    if (!Number.isInteger(maxRedirections) || maxRedirections < 0) {
 	      throw new InvalidArgumentError('maxRedirections must be a positive number')
 	    }
+
+	    super(options);
 
 	    if (connect && typeof connect !== 'function') {
 	      connect = { ...connect };
@@ -24088,32 +24247,25 @@ function requireParse$1 () {
 	    // If the attribute-name case-insensitively matches the string
 	    // "SameSite", the user agent MUST process the cookie-av as follows:
 
-	    // 1. Let enforcement be "Default".
-	    let enforcement = 'Default';
-
 	    const attributeValueLowercase = attributeValue.toLowerCase();
-	    // 2. If cookie-av's attribute-value is a case-insensitive match for
-	    //    "None", set enforcement to "None".
-	    if (attributeValueLowercase.includes('none')) {
-	      enforcement = 'None';
-	    }
 
-	    // 3. If cookie-av's attribute-value is a case-insensitive match for
-	    //    "Strict", set enforcement to "Strict".
-	    if (attributeValueLowercase.includes('strict')) {
-	      enforcement = 'Strict';
+	    // 1. If cookie-av's attribute-value is a case-insensitive match for
+	    //    "None", append an attribute to the cookie-attribute-list with an
+	    //    attribute-name of "SameSite" and an attribute-value of "None".
+	    if (attributeValueLowercase === 'none') {
+	      cookieAttributeList.sameSite = 'None';
+	    } else if (attributeValueLowercase === 'strict') {
+	      // 2. If cookie-av's attribute-value is a case-insensitive match for
+	      //    "Strict", append an attribute to the cookie-attribute-list with
+	      //    an attribute-name of "SameSite" and an attribute-value of
+	      //    "Strict".
+	      cookieAttributeList.sameSite = 'Strict';
+	    } else if (attributeValueLowercase === 'lax') {
+	      // 3. If cookie-av's attribute-value is a case-insensitive match for
+	      //    "Lax", append an attribute to the cookie-attribute-list with an
+	      //    attribute-name of "SameSite" and an attribute-value of "Lax".
+	      cookieAttributeList.sameSite = 'Lax';
 	    }
-
-	    // 4. If cookie-av's attribute-value is a case-insensitive match for
-	    //    "Lax", set enforcement to "Lax".
-	    if (attributeValueLowercase.includes('lax')) {
-	      enforcement = 'Lax';
-	    }
-
-	    // 5. Append an attribute to the cookie-attribute-list with an
-	    //    attribute-name of "SameSite" and an attribute-value of
-	    //    enforcement.
-	    cookieAttributeList.sameSite = enforcement;
 	  } else {
 	    cookieAttributeList.unparsed ??= [];
 
@@ -25027,6 +25179,12 @@ function requireUtil$1 () {
 	 * @param {string} value
 	 */
 	function isValidClientWindowBits (value) {
+	  // Must have at least one character
+	  if (value.length === 0) {
+	    return false
+	  }
+
+	  // Check all characters are ASCII digits
 	  for (let i = 0; i < value.length; i++) {
 	    const byte = value.charCodeAt(i);
 
@@ -25035,7 +25193,9 @@ function requireUtil$1 () {
 	    }
 	  }
 
-	  return true
+	  // Check numeric range: zlib requires windowBits in range 8-15
+	  const num = Number.parseInt(value, 10);
+	  return num >= 8 && num <= 15
 	}
 
 	// https://nodejs.org/api/intl.html#detecting-internationalization-support
@@ -25565,6 +25725,7 @@ function requirePermessageDeflate () {
 
 	const { createInflateRaw, Z_DEFAULT_WINDOWBITS } = zlib;
 	const { isValidClientWindowBits } = requireUtil$1();
+	const { MessageSizeExceededError } = requireErrors();
 
 	const tail = Buffer.from([0x00, 0x00, 0xff, 0xff]);
 	const kBuffer = Symbol('kBuffer');
@@ -25576,17 +25737,29 @@ function requirePermessageDeflate () {
 
 	  #options = {}
 
-	  constructor (extensions) {
+	  #maxPayloadSize = 0
+
+	  /**
+	   * @param {Map<string, string>} extensions
+	   */
+	  constructor (extensions, options) {
 	    this.#options.serverNoContextTakeover = extensions.has('server_no_context_takeover');
 	    this.#options.serverMaxWindowBits = extensions.get('server_max_window_bits');
+
+	    this.#maxPayloadSize = options.maxPayloadSize;
 	  }
 
+	  /**
+	   * Decompress a compressed payload.
+	   * @param {Buffer} chunk Compressed data
+	   * @param {boolean} fin Final fragment flag
+	   * @param {Function} callback Callback function
+	   */
 	  decompress (chunk, fin, callback) {
 	    // An endpoint uses the following algorithm to decompress a message.
 	    // 1.  Append 4 octets of 0x00 0x00 0xff 0xff to the tail end of the
 	    //     payload of the message.
 	    // 2.  Decompress the resulting data using DEFLATE.
-
 	    if (!this.#inflate) {
 	      let windowBits = Z_DEFAULT_WINDOWBITS;
 
@@ -25599,13 +25772,26 @@ function requirePermessageDeflate () {
 	        windowBits = Number.parseInt(this.#options.serverMaxWindowBits);
 	      }
 
-	      this.#inflate = createInflateRaw({ windowBits });
+	      try {
+	        this.#inflate = createInflateRaw({ windowBits });
+	      } catch (err) {
+	        callback(err);
+	        return
+	      }
 	      this.#inflate[kBuffer] = [];
 	      this.#inflate[kLength] = 0;
 
 	      this.#inflate.on('data', (data) => {
-	        this.#inflate[kBuffer].push(data);
 	        this.#inflate[kLength] += data.length;
+
+	        if (this.#maxPayloadSize > 0 && this.#inflate[kLength] > this.#maxPayloadSize) {
+	          callback(new MessageSizeExceededError());
+	          this.#inflate.removeAllListeners();
+	          this.#inflate = null;
+	          return
+	        }
+
+	        this.#inflate[kBuffer].push(data);
 	      });
 
 	      this.#inflate.on('error', (err) => {
@@ -25620,6 +25806,10 @@ function requirePermessageDeflate () {
 	    }
 
 	    this.#inflate.flush(() => {
+	      if (!this.#inflate) {
+	        return
+	      }
+
 	      const full = Buffer.concat(this.#inflate[kBuffer], this.#inflate[kLength]);
 
 	      this.#inflate[kBuffer].length = 0;
@@ -25659,6 +25849,12 @@ function requireReceiver () {
 	const { WebsocketFrameSend } = requireFrame();
 	const { closeWebSocketConnection } = requireConnection();
 	const { PerMessageDeflate } = requirePermessageDeflate();
+	const { MessageSizeExceededError } = requireErrors();
+
+	function failWebsocketConnectionWithCode (ws, code, reason) {
+	  closeWebSocketConnection(ws, code, reason, Buffer.byteLength(reason));
+	  failWebsocketConnection(ws, reason);
+	}
 
 	// This code was influenced by ws released under the MIT license.
 	// Copyright (c) 2011 Einar Otto Stangvik <einaros@gmail.com>
@@ -25667,6 +25863,7 @@ function requireReceiver () {
 
 	class ByteParser extends Writable {
 	  #buffers = []
+	  #fragmentsBytes = 0
 	  #byteOffset = 0
 	  #loop = false
 
@@ -25678,14 +25875,27 @@ function requireReceiver () {
 	  /** @type {Map<string, PerMessageDeflate>} */
 	  #extensions
 
-	  constructor (ws, extensions) {
+	  /** @type {number} */
+	  #maxFragments
+
+	  /** @type {number} */
+	  #maxPayloadSize
+
+	  /**
+	   * @param {import('./websocket').WebSocket} ws
+	   * @param {Map<string, string>|null} extensions
+	   * @param {{ maxFragments?: number, maxPayloadSize?: number }} [options]
+	   */
+	  constructor (ws, extensions, options = {}) {
 	    super();
 
 	    this.ws = ws;
 	    this.#extensions = extensions == null ? new Map() : extensions;
+	    this.#maxFragments = options.maxFragments ?? 0;
+	    this.#maxPayloadSize = options.maxPayloadSize ?? 0;
 
 	    if (this.#extensions.has('permessage-deflate')) {
-	      this.#extensions.set('permessage-deflate', new PerMessageDeflate(extensions));
+	      this.#extensions.set('permessage-deflate', new PerMessageDeflate(extensions, options));
 	    }
 	  }
 
@@ -25699,6 +25909,19 @@ function requireReceiver () {
 	    this.#loop = true;
 
 	    this.run(callback);
+	  }
+
+	  #validatePayloadLength () {
+	    if (
+	      this.#maxPayloadSize > 0 &&
+	      !isControlFrame(this.#info.opcode) &&
+	      this.#info.payloadLength + this.#fragmentsBytes > this.#maxPayloadSize
+	    ) {
+	      failWebsocketConnectionWithCode(this.ws, 1009, 'Payload size exceeds maximum allowed size');
+	      return false
+	    }
+
+	    return true
 	  }
 
 	  /**
@@ -25789,6 +26012,10 @@ function requireReceiver () {
 	        if (payloadLength <= 125) {
 	          this.#info.payloadLength = payloadLength;
 	          this.#state = parserStates.READ_DATA;
+
+	          if (!this.#validatePayloadLength()) {
+	            return
+	          }
 	        } else if (payloadLength === 126) {
 	          this.#state = parserStates.PAYLOADLENGTH_16;
 	        } else if (payloadLength === 127) {
@@ -25813,6 +26040,10 @@ function requireReceiver () {
 
 	        this.#info.payloadLength = buffer.readUInt16BE(0);
 	        this.#state = parserStates.READ_DATA;
+
+	        if (!this.#validatePayloadLength()) {
+	          return
+	        }
 	      } else if (this.#state === parserStates.PAYLOADLENGTH_64) {
 	        if (this.#byteOffset < 8) {
 	          return callback()
@@ -25820,6 +26051,7 @@ function requireReceiver () {
 
 	        const buffer = this.consume(8);
 	        const upper = buffer.readUInt32BE(0);
+	        const lower = buffer.readUInt32BE(4);
 
 	        // 2^31 is the maximum bytes an arraybuffer can contain
 	        // on 32-bit systems. Although, on 64-bit systems, this is
@@ -25827,15 +26059,17 @@ function requireReceiver () {
 	        // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Invalid_array_length
 	        // https://source.chromium.org/chromium/chromium/src/+/main:v8/src/common/globals.h;drc=1946212ac0100668f14eb9e2843bdd846e510a1e;bpv=1;bpt=1;l=1275
 	        // https://source.chromium.org/chromium/chromium/src/+/main:v8/src/objects/js-array-buffer.h;l=34;drc=1946212ac0100668f14eb9e2843bdd846e510a1e
-	        if (upper > 2 ** 31 - 1) {
+	        if (upper !== 0 || lower > 2 ** 31 - 1) {
 	          failWebsocketConnection(this.ws, 'Received payload length > 2^31 bytes.');
 	          return
 	        }
 
-	        const lower = buffer.readUInt32BE(4);
-
-	        this.#info.payloadLength = (upper << 8) + lower;
+	        this.#info.payloadLength = lower;
 	        this.#state = parserStates.READ_DATA;
+
+	        if (!this.#validatePayloadLength()) {
+	          return
+	        }
 	      } else if (this.#state === parserStates.READ_DATA) {
 	        if (this.#byteOffset < this.#info.payloadLength) {
 	          return callback()
@@ -25848,42 +26082,58 @@ function requireReceiver () {
 	          this.#state = parserStates.INFO;
 	        } else {
 	          if (!this.#info.compressed) {
-	            this.#fragments.push(body);
+	            if (!this.writeFragments(body)) {
+	              return
+	            }
+
+	            if (this.#maxPayloadSize > 0 && this.#fragmentsBytes > this.#maxPayloadSize) {
+	              failWebsocketConnectionWithCode(this.ws, 1009, new MessageSizeExceededError().message);
+	              return
+	            }
 
 	            // If the frame is not fragmented, a message has been received.
 	            // If the frame is fragmented, it will terminate with a fin bit set
 	            // and an opcode of 0 (continuation), therefore we handle that when
 	            // parsing continuation frames, not here.
 	            if (!this.#info.fragmented && this.#info.fin) {
-	              const fullMessage = Buffer.concat(this.#fragments);
-	              websocketMessageReceived(this.ws, this.#info.binaryType, fullMessage);
-	              this.#fragments.length = 0;
+	              websocketMessageReceived(this.ws, this.#info.binaryType, this.consumeFragments());
 	            }
 
 	            this.#state = parserStates.INFO;
 	          } else {
-	            this.#extensions.get('permessage-deflate').decompress(body, this.#info.fin, (error, data) => {
-	              if (error) {
-	                closeWebSocketConnection(this.ws, 1007, error.message, error.message.length);
-	                return
-	              }
+	            this.#extensions.get('permessage-deflate').decompress(
+	              body,
+	              this.#info.fin,
+	              (error, data) => {
+	                if (error) {
+	                  const code = error instanceof MessageSizeExceededError ? 1009 : 1007;
+	                  failWebsocketConnectionWithCode(this.ws, code, error.message);
+	                  return
+	                }
 
-	              this.#fragments.push(data);
+	                if (!this.writeFragments(data)) {
+	                  return
+	                }
 
-	              if (!this.#info.fin) {
-	                this.#state = parserStates.INFO;
+	                if (this.#maxPayloadSize > 0 && this.#fragmentsBytes > this.#maxPayloadSize) {
+	                  failWebsocketConnectionWithCode(this.ws, 1009, new MessageSizeExceededError().message);
+	                  return
+	                }
+
+	                if (!this.#info.fin) {
+	                  this.#state = parserStates.INFO;
+	                  this.#loop = true;
+	                  this.run(callback);
+	                  return
+	                }
+
+	                websocketMessageReceived(this.ws, this.#info.binaryType, this.consumeFragments());
+
 	                this.#loop = true;
+	                this.#state = parserStates.INFO;
 	                this.run(callback);
-	                return
 	              }
-
-	              websocketMessageReceived(this.ws, this.#info.binaryType, Buffer.concat(this.#fragments));
-
-	              this.#loop = true;
-	              this.#state = parserStates.INFO;
-	              this.#fragments.length = 0;
-	              this.run(callback);
-	            });
+	            );
 
 	            this.#loop = false;
 	            break
@@ -25933,6 +26183,35 @@ function requireReceiver () {
 	    this.#byteOffset -= n;
 
 	    return buffer
+	  }
+
+	  writeFragments (fragment) {
+	    if (
+	      this.#maxFragments > 0 &&
+	      this.#fragments.length === this.#maxFragments
+	    ) {
+	      failWebsocketConnectionWithCode(this.ws, 1008, 'Too many message fragments');
+	      return false
+	    }
+
+	    this.#fragmentsBytes += fragment.length;
+	    this.#fragments.push(fragment);
+	    return true
+	  }
+
+	  consumeFragments () {
+	    const fragments = this.#fragments;
+
+	    if (fragments.length === 1) {
+	      this.#fragmentsBytes = 0;
+	      return fragments.shift()
+	    }
+
+	    const output = Buffer.concat(fragments, this.#fragmentsBytes);
+	    this.#fragments = [];
+	    this.#fragmentsBytes = 0;
+
+	    return output
 	  }
 
 	  parseCloseBody (data) {
@@ -26616,11 +26895,18 @@ function requireWebsocket () {
 	   * @see https://websockets.spec.whatwg.org/#feedback-from-the-protocol
 	   */
 	  #onConnectionEstablished (response, parsedExtensions) {
-	    // processResponse is called when the "response’s header list has been received and initialized."
+	    // processResponse is called when the "response's header list has been received and initialized."
 	    // once this happens, the connection is open
 	    this[kResponse] = response;
 
-	    const parser = new ByteParser(this, parsedExtensions);
+	    const webSocketOptions = this[kController]?.dispatcher?.webSocketOptions;
+	    const maxFragments = webSocketOptions?.maxFragments;
+	    const maxPayloadSize = webSocketOptions?.maxPayloadSize;
+
+	    const parser = new ByteParser(this, parsedExtensions, {
+	      maxFragments,
+	      maxPayloadSize
+	    });
 	    parser.on('drain', onParserDrain);
 	    parser.on('error', onParserError.bind(this));
 
@@ -28709,7 +28995,7 @@ function tryGetExecutablePath(filePath, extensions) {
         if (stats && stats.isFile()) {
             if (IS_WINDOWS$9) {
                 // on Windows, test for valid extension
-                const upperExt = path.extname(filePath).toUpperCase();
+                const upperExt = path$1.extname(filePath).toUpperCase();
                 if (extensions.some(validExt => validExt.toUpperCase() === upperExt)) {
                     return filePath;
                 }
@@ -28738,11 +29024,11 @@ function tryGetExecutablePath(filePath, extensions) {
                 if (IS_WINDOWS$9) {
                     // preserve the case of the actual file (since an extension was appended)
                     try {
-                        const directory = path.dirname(filePath);
-                        const upperName = path.basename(filePath).toUpperCase();
+                        const directory = path$1.dirname(filePath);
+                        const upperName = path$1.basename(filePath).toUpperCase();
                         for (const actualName of yield readdir(directory)) {
                             if (upperName === actualName.toUpperCase()) {
-                                filePath = path.join(directory, actualName);
+                                filePath = path$1.join(directory, actualName);
                                 break;
                             }
                         }
@@ -28814,7 +29100,7 @@ function cp(source_1, dest_1) {
         }
         // If dest is an existing directory, should copy inside.
         const newDest = destStat && destStat.isDirectory() && copySourceDirectory
-            ? path.join(dest, path.basename(source))
+            ? path$1.join(dest, path$1.basename(source))
             : dest;
         if (!(yield exists(source))) {
             throw new Error(`no such file or directory: ${source}`);
@@ -28829,7 +29115,7 @@ function cp(source_1, dest_1) {
             }
         }
         else {
-            if (path.relative(source, newDest) === '') {
+            if (path$1.relative(source, newDest) === '') {
                 // a file cannot be copied to itself
                 throw new Error(`'${newDest}' and '${source}' are the same file`);
             }
@@ -28924,7 +29210,7 @@ function findInPath(tool) {
         // build the list of extensions to try
         const extensions = [];
         if (IS_WINDOWS$9 && process.env['PATHEXT']) {
-            for (const extension of process.env['PATHEXT'].split(path.delimiter)) {
+            for (const extension of process.env['PATHEXT'].split(path$1.delimiter)) {
                 if (extension) {
                     extensions.push(extension);
                 }
@@ -28939,7 +29225,7 @@ function findInPath(tool) {
             return [];
         }
         // if any path separators, return empty
-        if (tool.includes(path.sep)) {
+        if (tool.includes(path$1.sep)) {
             return [];
         }
         // build the list of directories
@@ -28950,7 +29236,7 @@ function findInPath(tool) {
         // across platforms.
         const directories = [];
         if (process.env.PATH) {
-            for (const p of process.env.PATH.split(path.delimiter)) {
+            for (const p of process.env.PATH.split(path$1.delimiter)) {
                 if (p) {
                     directories.push(p);
                 }
@@ -28959,7 +29245,7 @@ function findInPath(tool) {
         // find all matches
         const matches = [];
         for (const directory of directories) {
-            const filePath = yield tryGetExecutablePath(path.join(directory, tool), extensions);
+            const filePath = yield tryGetExecutablePath(path$1.join(directory, tool), extensions);
             if (filePath) {
                 matches.push(filePath);
             }
@@ -29380,7 +29666,7 @@ class ToolRunner extends events$1.EventEmitter {
                 (this.toolPath.includes('/') ||
                     (IS_WINDOWS$8 && this.toolPath.includes('\\')))) {
                 // prefer options.cwd if it is specified, however options.cwd may also need to be rooted
-                this.toolPath = path.resolve(process.cwd(), this.options.cwd || process.cwd(), this.toolPath);
+                this.toolPath = path$1.resolve(process.cwd(), this.options.cwd || process.cwd(), this.toolPath);
             }
             // if the tool is only a file name, then resolve it from the PATH
             // otherwise verify it exists (add extension on Windows if necessary)
@@ -29780,7 +30066,7 @@ function addPath(inputPath) {
     else {
         issueCommand('add-path', {}, inputPath);
     }
-    process.env['PATH'] = `${inputPath}${path.delimiter}${process.env['PATH']}`;
+    process.env['PATH'] = `${inputPath}${path$1.delimiter}${process.env['PATH']}`;
 }
 /**
  * Gets the value of an input.
@@ -29794,6 +30080,21 @@ function addPath(inputPath) {
 function getInput(name, options) {
     const val = process.env[`INPUT_${name.replace(/ /g, '_').toUpperCase()}`] || '';
     return val.trim();
+}
+/**
+ * Sets the value of an output.
+ *
+ * @param     name     name of the output to set
+ * @param     value    value to store. Non-string values will be converted to a string via JSON.stringify
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function setOutput(name, value) {
+    const filePath = process.env['GITHUB_OUTPUT'] || '';
+    if (filePath) {
+        return issueFileCommand('OUTPUT', prepareKeyValueMessage(name, value));
+    }
+    process.stdout.write(os.EOL);
+    issueCommand('set-output', { name }, toCommandValue(value));
 }
 //-----------------------------------------------------------------------
 // Results
@@ -29963,7 +30264,7 @@ function dirname(p) {
         return p;
     }
     // Get dirname
-    let result = path.dirname(p);
+    let result = path$1.dirname(p);
     // Trim trailing slash for Windows UNC root, e.g. \\hello\world\
     if (IS_WINDOWS$7 && /^\\\\[^\\]+\\[^\\]+\\$/.test(result)) {
         result = safeTrimTrailingSeparator(result);
@@ -30020,7 +30321,7 @@ function ensureAbsoluteRoot(root, itemPath) {
     if (root.endsWith('/') || (IS_WINDOWS$7 && root.endsWith('\\'))) ;
     else {
         // Append separator
-        root += path.sep;
+        root += path$1.sep;
     }
     return root + itemPath;
 }
@@ -30085,11 +30386,11 @@ function safeTrimTrailingSeparator(p) {
     // Normalize separators
     p = normalizeSeparators(p);
     // No trailing slash
-    if (!p.endsWith(path.sep)) {
+    if (!p.endsWith(path$1.sep)) {
         return p;
     }
     // Check '/' on Linux/macOS and '\' on Windows
-    if (p === path.sep) {
+    if (p === path$1.sep) {
         return p;
     }
     // On Windows check if drive root. E.g. C:\
@@ -30103,7 +30404,7 @@ function safeTrimTrailingSeparator(p) {
 /**
  * Indicates whether a pattern matches a path
  */
-var MatchKind;
+var MatchKind$1;
 (function (MatchKind) {
     /** Not matched */
     MatchKind[MatchKind["None"] = 0] = "None";
@@ -30113,7 +30414,7 @@ var MatchKind;
     MatchKind[MatchKind["File"] = 2] = "File";
     /** Matched */
     MatchKind[MatchKind["All"] = 3] = "All";
-})(MatchKind || (MatchKind = {}));
+})(MatchKind$1 || (MatchKind$1 = {}));
 
 const IS_WINDOWS$6 = process.platform === 'win32';
 /**
@@ -30163,8 +30464,8 @@ function getSearchPaths(patterns) {
 /**
  * Matches the patterns against the path
  */
-function match(patterns, itemPath) {
-    let result = MatchKind.None;
+function match$1(patterns, itemPath) {
+    let result = MatchKind$1.None;
     for (const pattern of patterns) {
         if (pattern.negate) {
             result &= ~pattern.match(itemPath);
@@ -30181,6 +30482,3066 @@ function match(patterns, itemPath) {
 function partialMatch(patterns, itemPath) {
     return patterns.some(x => !x.negate && x.partialMatch(itemPath));
 }
+
+const balanced = (a, b, str) => {
+    const ma = a instanceof RegExp ? maybeMatch(a, str) : a;
+    const mb = b instanceof RegExp ? maybeMatch(b, str) : b;
+    const r = ma !== null && mb != null && range$2(ma, mb, str);
+    return (r && {
+        start: r[0],
+        end: r[1],
+        pre: str.slice(0, r[0]),
+        body: str.slice(r[0] + ma.length, r[1]),
+        post: str.slice(r[1] + mb.length),
+    });
+};
+const maybeMatch = (reg, str) => {
+    const m = str.match(reg);
+    return m ? m[0] : null;
+};
+const range$2 = (a, b, str) => {
+    let begs, beg, left, right = undefined, result;
+    let ai = str.indexOf(a);
+    let bi = str.indexOf(b, ai + 1);
+    let i = ai;
+    if (ai >= 0 && bi > 0) {
+        if (a === b) {
+            return [ai, bi];
+        }
+        begs = [];
+        left = str.length;
+        while (i >= 0 && !result) {
+            if (i === ai) {
+                begs.push(i);
+                ai = str.indexOf(a, i + 1);
+            }
+            else if (begs.length === 1) {
+                const r = begs.pop();
+                if (r !== undefined)
+                    result = [r, bi];
+            }
+            else {
+                beg = begs.pop();
+                if (beg !== undefined && beg < left) {
+                    left = beg;
+                    right = bi;
+                }
+                bi = str.indexOf(b, i + 1);
+            }
+            i = ai < bi && ai >= 0 ? ai : bi;
+        }
+        if (begs.length && right !== undefined) {
+            result = [left, right];
+        }
+    }
+    return result;
+};
+
+const escSlash = '\0SLASH' + Math.random() + '\0';
+const escOpen = '\0OPEN' + Math.random() + '\0';
+const escClose = '\0CLOSE' + Math.random() + '\0';
+const escComma = '\0COMMA' + Math.random() + '\0';
+const escPeriod = '\0PERIOD' + Math.random() + '\0';
+const escSlashPattern = new RegExp(escSlash, 'g');
+const escOpenPattern = new RegExp(escOpen, 'g');
+const escClosePattern = new RegExp(escClose, 'g');
+const escCommaPattern = new RegExp(escComma, 'g');
+const escPeriodPattern = new RegExp(escPeriod, 'g');
+const slashPattern = /\\\\/g;
+const openPattern = /\\{/g;
+const closePattern = /\\}/g;
+const commaPattern = /\\,/g;
+const periodPattern = /\\\./g;
+const EXPANSION_MAX = 100_000;
+function numeric(str) {
+    return !isNaN(str) ? parseInt(str, 10) : str.charCodeAt(0);
+}
+function escapeBraces(str) {
+    return str
+        .replace(slashPattern, escSlash)
+        .replace(openPattern, escOpen)
+        .replace(closePattern, escClose)
+        .replace(commaPattern, escComma)
+        .replace(periodPattern, escPeriod);
+}
+function unescapeBraces(str) {
+    return str
+        .replace(escSlashPattern, '\\')
+        .replace(escOpenPattern, '{')
+        .replace(escClosePattern, '}')
+        .replace(escCommaPattern, ',')
+        .replace(escPeriodPattern, '.');
+}
+/**
+ * Basically just str.split(","), but handling cases
+ * where we have nested braced sections, which should be
+ * treated as individual members, like {a,{b,c},d}
+ */
+function parseCommaParts(str) {
+    if (!str) {
+        return [''];
+    }
+    const parts = [];
+    const m = balanced('{', '}', str);
+    if (!m) {
+        return str.split(',');
+    }
+    const { pre, body, post } = m;
+    const p = pre.split(',');
+    p[p.length - 1] += '{' + body + '}';
+    const postParts = parseCommaParts(post);
+    if (post.length) {
+        p[p.length - 1] += postParts.shift();
+        p.push.apply(p, postParts);
+    }
+    parts.push.apply(parts, p);
+    return parts;
+}
+function expand(str, options = {}) {
+    if (!str) {
+        return [];
+    }
+    const { max = EXPANSION_MAX } = options;
+    // I don't know why Bash 4.3 does this, but it does.
+    // Anything starting with {} will have the first two bytes preserved
+    // but *only* at the top level, so {},a}b will not expand to anything,
+    // but a{},b}c will be expanded to [a}c,abc].
+    // One could argue that this is a bug in Bash, but since the goal of
+    // this module is to match Bash's rules, we escape a leading {}
+    if (str.slice(0, 2) === '{}') {
+        str = '\\{\\}' + str.slice(2);
+    }
+    return expand_(escapeBraces(str), max, true).map(unescapeBraces);
+}
+function embrace(str) {
+    return '{' + str + '}';
+}
+function isPadded(el) {
+    return /^-?0\d/.test(el);
+}
+function lte(i, y) {
+    return i <= y;
+}
+function gte(i, y) {
+    return i >= y;
+}
+function expand_(str, max, isTop) {
+    /** @type {string[]} */
+    const expansions = [];
+    const m = balanced('{', '}', str);
+    if (!m)
+        return [str];
+    // no need to expand pre, since it is guaranteed to be free of brace-sets
+    const pre = m.pre;
+    const post = m.post.length ? expand_(m.post, max, false) : [''];
+    if (/\$$/.test(m.pre)) {
+        for (let k = 0; k < post.length && k < max; k++) {
+            const expansion = pre + '{' + m.body + '}' + post[k];
+            expansions.push(expansion);
+        }
+    }
+    else {
+        const isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m.body);
+        const isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m.body);
+        const isSequence = isNumericSequence || isAlphaSequence;
+        const isOptions = m.body.indexOf(',') >= 0;
+        if (!isSequence && !isOptions) {
+            // {a},b}
+            if (m.post.match(/,(?!,).*\}/)) {
+                str = m.pre + '{' + m.body + escClose + m.post;
+                return expand_(str, max, true);
+            }
+            return [str];
+        }
+        let n;
+        if (isSequence) {
+            n = m.body.split(/\.\./);
+        }
+        else {
+            n = parseCommaParts(m.body);
+            if (n.length === 1 && n[0] !== undefined) {
+                // x{{a,b}}y ==> x{a}y x{b}y
+                n = expand_(n[0], max, false).map(embrace);
+                //XXX is this necessary? Can't seem to hit it in tests.
+                /* c8 ignore start */
+                if (n.length === 1) {
+                    return post.map(p => m.pre + n[0] + p);
+                }
+                /* c8 ignore stop */
+            }
+        }
+        // at this point, n is the parts, and we know it's not a comma set
+        // with a single entry.
+        let N;
+        if (isSequence && n[0] !== undefined && n[1] !== undefined) {
+            const x = numeric(n[0]);
+            const y = numeric(n[1]);
+            const width = Math.max(n[0].length, n[1].length);
+            let incr = n.length === 3 && n[2] !== undefined ?
+                Math.max(Math.abs(numeric(n[2])), 1)
+                : 1;
+            let test = lte;
+            const reverse = y < x;
+            if (reverse) {
+                incr *= -1;
+                test = gte;
+            }
+            const pad = n.some(isPadded);
+            N = [];
+            for (let i = x; test(i, y) && N.length < max; i += incr) {
+                let c;
+                if (isAlphaSequence) {
+                    c = String.fromCharCode(i);
+                    if (c === '\\') {
+                        c = '';
+                    }
+                }
+                else {
+                    c = String(i);
+                    if (pad) {
+                        const need = width - c.length;
+                        if (need > 0) {
+                            const z = new Array(need + 1).join('0');
+                            if (i < 0) {
+                                c = '-' + z + c.slice(1);
+                            }
+                            else {
+                                c = z + c;
+                            }
+                        }
+                    }
+                }
+                N.push(c);
+            }
+        }
+        else {
+            N = [];
+            for (let j = 0; j < n.length; j++) {
+                N.push.apply(N, expand_(n[j], max, false));
+            }
+        }
+        for (let j = 0; j < N.length; j++) {
+            for (let k = 0; k < post.length && expansions.length < max; k++) {
+                const expansion = pre + N[j] + post[k];
+                if (!isTop || isSequence || expansion) {
+                    expansions.push(expansion);
+                }
+            }
+        }
+    }
+    return expansions;
+}
+
+const MAX_PATTERN_LENGTH = 1024 * 64;
+const assertValidPattern = (pattern) => {
+    if (typeof pattern !== 'string') {
+        throw new TypeError('invalid pattern');
+    }
+    if (pattern.length > MAX_PATTERN_LENGTH) {
+        throw new TypeError('pattern is too long');
+    }
+};
+
+// translate the various posix character classes into unicode properties
+// this works across all unicode locales
+// { <posix class>: [<translation>, /u flag required, negated]
+const posixClasses = {
+    '[:alnum:]': ['\\p{L}\\p{Nl}\\p{Nd}', true],
+    '[:alpha:]': ['\\p{L}\\p{Nl}', true],
+    '[:ascii:]': ['\\x' + '00-\\x' + '7f', false],
+    '[:blank:]': ['\\p{Zs}\\t', true],
+    '[:cntrl:]': ['\\p{Cc}', true],
+    '[:digit:]': ['\\p{Nd}', true],
+    '[:graph:]': ['\\p{Z}\\p{C}', true, true],
+    '[:lower:]': ['\\p{Ll}', true],
+    '[:print:]': ['\\p{C}', true],
+    '[:punct:]': ['\\p{P}', true],
+    '[:space:]': ['\\p{Z}\\t\\r\\n\\v\\f', true],
+    '[:upper:]': ['\\p{Lu}', true],
+    '[:word:]': ['\\p{L}\\p{Nl}\\p{Nd}\\p{Pc}', true],
+    '[:xdigit:]': ['A-Fa-f0-9', false],
+};
+// only need to escape a few things inside of brace expressions
+// escapes: [ \ ] -
+const braceEscape = (s) => s.replace(/[[\]\\-]/g, '\\$&');
+// escape all regexp magic characters
+const regexpEscape = (s) => s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+// everything has already been escaped, we just have to join
+const rangesToString = (ranges) => ranges.join('');
+// takes a glob string at a posix brace expression, and returns
+// an equivalent regular expression source, and boolean indicating
+// whether the /u flag needs to be applied, and the number of chars
+// consumed to parse the character class.
+// This also removes out of order ranges, and returns ($.) if the
+// entire class just no good.
+const parseClass = (glob, position) => {
+    const pos = position;
+    /* c8 ignore start */
+    if (glob.charAt(pos) !== '[') {
+        throw new Error('not in a brace expression');
+    }
+    /* c8 ignore stop */
+    const ranges = [];
+    const negs = [];
+    let i = pos + 1;
+    let sawStart = false;
+    let uflag = false;
+    let escaping = false;
+    let negate = false;
+    let endPos = pos;
+    let rangeStart = '';
+    WHILE: while (i < glob.length) {
+        const c = glob.charAt(i);
+        if ((c === '!' || c === '^') && i === pos + 1) {
+            negate = true;
+            i++;
+            continue;
+        }
+        if (c === ']' && sawStart && !escaping) {
+            endPos = i + 1;
+            break;
+        }
+        sawStart = true;
+        if (c === '\\') {
+            if (!escaping) {
+                escaping = true;
+                i++;
+                continue;
+            }
+            // escaped \ char, fall through and treat like normal char
+        }
+        if (c === '[' && !escaping) {
+            // either a posix class, a collation equivalent, or just a [
+            for (const [cls, [unip, u, neg]] of Object.entries(posixClasses)) {
+                if (glob.startsWith(cls, i)) {
+                    // invalid, [a-[] is fine, but not [a-[:alpha]]
+                    if (rangeStart) {
+                        return ['$.', false, glob.length - pos, true];
+                    }
+                    i += cls.length;
+                    if (neg)
+                        negs.push(unip);
+                    else
+                        ranges.push(unip);
+                    uflag = uflag || u;
+                    continue WHILE;
+                }
+            }
+        }
+        // now it's just a normal character, effectively
+        escaping = false;
+        if (rangeStart) {
+            // throw this range away if it's not valid, but others
+            // can still match.
+            if (c > rangeStart) {
+                ranges.push(braceEscape(rangeStart) + '-' + braceEscape(c));
+            }
+            else if (c === rangeStart) {
+                ranges.push(braceEscape(c));
+            }
+            rangeStart = '';
+            i++;
+            continue;
+        }
+        // now might be the start of a range.
+        // can be either c-d or c-] or c<more...>] or c] at this point
+        if (glob.startsWith('-]', i + 1)) {
+            ranges.push(braceEscape(c + '-'));
+            i += 2;
+            continue;
+        }
+        if (glob.startsWith('-', i + 1)) {
+            rangeStart = c;
+            i += 2;
+            continue;
+        }
+        // not the start of a range, just a single character
+        ranges.push(braceEscape(c));
+        i++;
+    }
+    if (endPos < i) {
+        // didn't see the end of the class, not a valid class,
+        // but might still be valid as a literal match.
+        return ['', false, 0, false];
+    }
+    // if we got no ranges and no negates, then we have a range that
+    // cannot possibly match anything, and that poisons the whole glob
+    if (!ranges.length && !negs.length) {
+        return ['$.', false, glob.length - pos, true];
+    }
+    // if we got one positive range, and it's a single character, then that's
+    // not actually a magic pattern, it's just that one literal character.
+    // we should not treat that as "magic", we should just return the literal
+    // character. [_] is a perfectly valid way to escape glob magic chars.
+    if (negs.length === 0 &&
+        ranges.length === 1 &&
+        /^\\?.$/.test(ranges[0]) &&
+        !negate) {
+        const r = ranges[0].length === 2 ? ranges[0].slice(-1) : ranges[0];
+        return [regexpEscape(r), false, endPos - pos, false];
+    }
+    const sranges = '[' + (negate ? '^' : '') + rangesToString(ranges) + ']';
+    const snegs = '[' + (negate ? '' : '^') + rangesToString(negs) + ']';
+    const comb = ranges.length && negs.length ? '(' + sranges + '|' + snegs + ')'
+        : ranges.length ? sranges
+            : snegs;
+    return [comb, uflag, endPos - pos, true];
+};
+
+/**
+ * Un-escape a string that has been escaped with {@link escape}.
+ *
+ * If the {@link MinimatchOptions.windowsPathsNoEscape} option is used, then
+ * square-bracket escapes are removed, but not backslash escapes.
+ *
+ * For example, it will turn the string `'[*]'` into `*`, but it will not
+ * turn `'\\*'` into `'*'`, because `\` is a path separator in
+ * `windowsPathsNoEscape` mode.
+ *
+ * When `windowsPathsNoEscape` is not set, then both square-bracket escapes and
+ * backslash escapes are removed.
+ *
+ * Slashes (and backslashes in `windowsPathsNoEscape` mode) cannot be escaped
+ * or unescaped.
+ *
+ * When `magicalBraces` is not set, escapes of braces (`{` and `}`) will not be
+ * unescaped.
+ */
+const unescape = (s, { windowsPathsNoEscape = false, magicalBraces = true, } = {}) => {
+    if (magicalBraces) {
+        return windowsPathsNoEscape ?
+            s.replace(/\[([^/\\])\]/g, '$1')
+            : s
+                .replace(/((?!\\).|^)\[([^/\\])\]/g, '$1$2')
+                .replace(/\\([^/])/g, '$1');
+    }
+    return windowsPathsNoEscape ?
+        s.replace(/\[([^/\\{}])\]/g, '$1')
+        : s
+            .replace(/((?!\\).|^)\[([^/\\{}])\]/g, '$1$2')
+            .replace(/\\([^/{}])/g, '$1');
+};
+
+// parse a single path portion
+var _a;
+const types = new Set(['!', '?', '+', '*', '@']);
+const isExtglobType = (c) => types.has(c);
+const isExtglobAST = (c) => isExtglobType(c.type);
+// Map of which extglob types can adopt the children of a nested extglob
+//
+// anything but ! can adopt a matching type:
+// +(a|+(b|c)|d) => +(a|b|c|d)
+// *(a|*(b|c)|d) => *(a|b|c|d)
+// @(a|@(b|c)|d) => @(a|b|c|d)
+// ?(a|?(b|c)|d) => ?(a|b|c|d)
+//
+// * can adopt anything, because 0 or repetition is allowed
+// *(a|?(b|c)|d) => *(a|b|c|d)
+// *(a|+(b|c)|d) => *(a|b|c|d)
+// *(a|@(b|c)|d) => *(a|b|c|d)
+//
+// + can adopt @, because 1 or repetition is allowed
+// +(a|@(b|c)|d) => +(a|b|c|d)
+//
+// + and @ CANNOT adopt *, because 0 would be allowed
+// +(a|*(b|c)|d) => would match "", on *(b|c)
+// @(a|*(b|c)|d) => would match "", on *(b|c)
+//
+// + and @ CANNOT adopt ?, because 0 would be allowed
+// +(a|?(b|c)|d) => would match "", on ?(b|c)
+// @(a|?(b|c)|d) => would match "", on ?(b|c)
+//
+// ? can adopt @, because 0 or 1 is allowed
+// ?(a|@(b|c)|d) => ?(a|b|c|d)
+//
+// ? and @ CANNOT adopt * or +, because >1 would be allowed
+// ?(a|*(b|c)|d) => would match bbb on *(b|c)
+// @(a|*(b|c)|d) => would match bbb on *(b|c)
+// ?(a|+(b|c)|d) => would match bbb on +(b|c)
+// @(a|+(b|c)|d) => would match bbb on +(b|c)
+//
+// ! CANNOT adopt ! (nothing else can either)
+// !(a|!(b|c)|d) => !(a|b|c|d) would fail to match on b (not not b|c)
+//
+// ! can adopt @
+// !(a|@(b|c)|d) => !(a|b|c|d)
+//
+// ! CANNOT adopt *
+// !(a|*(b|c)|d) => !(a|b|c|d) would match on bbb, not allowed
+//
+// ! CANNOT adopt +
+// !(a|+(b|c)|d) => !(a|b|c|d) would match on bbb, not allowed
+//
+// ! CANNOT adopt ?
+// x!(a|?(b|c)|d) => x!(a|b|c|d) would fail to match "x"
+const adoptionMap = new Map([
+    ['!', ['@']],
+    ['?', ['?', '@']],
+    ['@', ['@']],
+    ['*', ['*', '+', '?', '@']],
+    ['+', ['+', '@']],
+]);
+// nested extglobs that can be adopted in, but with the addition of
+// a blank '' element.
+const adoptionWithSpaceMap = new Map([
+    ['!', ['?']],
+    ['@', ['?']],
+    ['+', ['?', '*']],
+]);
+// union of the previous two maps
+const adoptionAnyMap = new Map([
+    ['!', ['?', '@']],
+    ['?', ['?', '@']],
+    ['@', ['?', '@']],
+    ['*', ['*', '+', '?', '@']],
+    ['+', ['+', '@', '?', '*']],
+]);
+// Extglobs that can take over their parent if they are the only child
+// the key is parent, value maps child to resulting extglob parent type
+// '@' is omitted because it's a special case. An `@` extglob with a single
+// member can always be usurped by that subpattern.
+const usurpMap = new Map([
+    ['!', new Map([['!', '@']])],
+    [
+        '?',
+        new Map([
+            ['*', '*'],
+            ['+', '*'],
+        ]),
+    ],
+    [
+        '@',
+        new Map([
+            ['!', '!'],
+            ['?', '?'],
+            ['@', '@'],
+            ['*', '*'],
+            ['+', '+'],
+        ]),
+    ],
+    [
+        '+',
+        new Map([
+            ['?', '*'],
+            ['*', '*'],
+        ]),
+    ],
+]);
+// Patterns that get prepended to bind to the start of either the
+// entire string, or just a single path portion, to prevent dots
+// and/or traversal patterns, when needed.
+// Exts don't need the ^ or / bit, because the root binds that already.
+const startNoTraversal = '(?!(?:^|/)\\.\\.?(?:$|/))';
+const startNoDot = '(?!\\.)';
+// characters that indicate a start of pattern needs the "no dots" bit,
+// because a dot *might* be matched. ( is not in the list, because in
+// the case of a child extglob, it will handle the prevention itself.
+const addPatternStart = new Set(['[', '.']);
+// cases where traversal is A-OK, no dot prevention needed
+const justDots = new Set(['..', '.']);
+const reSpecials = new Set('().*{}+?[]^$\\!');
+const regExpEscape$1 = (s) => s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+// any single thing other than /
+const qmark$1 = '[^/]';
+// * => any number of characters
+const star$1 = qmark$1 + '*?';
+// use + when we need to ensure that *something* matches, because the * is
+// the only thing in the path portion.
+const starNoEmpty = qmark$1 + '+?';
+// remove the \ chars that we added if we end up doing a nonmagic compare
+// const deslash = (s: string) => s.replace(/\\(.)/g, '$1')
+let ID = 0;
+class AST {
+    type;
+    #root;
+    #hasMagic;
+    #uflag = false;
+    #parts = [];
+    #parent;
+    #parentIndex;
+    #negs;
+    #filledNegs = false;
+    #options;
+    #toString;
+    // set to true if it's an extglob with no children
+    // (which really means one child of '')
+    #emptyExt = false;
+    id = ++ID;
+    get depth() {
+        return (this.#parent?.depth ?? -1) + 1;
+    }
+    [Symbol.for('nodejs.util.inspect.custom')]() {
+        return {
+            '@@type': 'AST',
+            id: this.id,
+            type: this.type,
+            root: this.#root.id,
+            parent: this.#parent?.id,
+            depth: this.depth,
+            partsLength: this.#parts.length,
+            parts: this.#parts,
+        };
+    }
+    constructor(type, parent, options = {}) {
+        this.type = type;
+        // extglobs are inherently magical
+        if (type)
+            this.#hasMagic = true;
+        this.#parent = parent;
+        this.#root = this.#parent ? this.#parent.#root : this;
+        this.#options = this.#root === this ? options : this.#root.#options;
+        this.#negs = this.#root === this ? [] : this.#root.#negs;
+        if (type === '!' && !this.#root.#filledNegs)
+            this.#negs.push(this);
+        this.#parentIndex = this.#parent ? this.#parent.#parts.length : 0;
+    }
+    get hasMagic() {
+        /* c8 ignore start */
+        if (this.#hasMagic !== undefined)
+            return this.#hasMagic;
+        /* c8 ignore stop */
+        for (const p of this.#parts) {
+            if (typeof p === 'string')
+                continue;
+            if (p.type || p.hasMagic)
+                return (this.#hasMagic = true);
+        }
+        // note: will be undefined until we generate the regexp src and find out
+        return this.#hasMagic;
+    }
+    // reconstructs the pattern
+    toString() {
+        return (this.#toString !== undefined ? this.#toString
+            : !this.type ?
+                (this.#toString = this.#parts.map(p => String(p)).join(''))
+                : (this.#toString =
+                    this.type +
+                        '(' +
+                        this.#parts.map(p => String(p)).join('|') +
+                        ')'));
+    }
+    #fillNegs() {
+        /* c8 ignore start */
+        if (this !== this.#root)
+            throw new Error('should only call on root');
+        if (this.#filledNegs)
+            return this;
+        /* c8 ignore stop */
+        // call toString() once to fill this out
+        this.toString();
+        this.#filledNegs = true;
+        let n;
+        while ((n = this.#negs.pop())) {
+            if (n.type !== '!')
+                continue;
+            // walk up the tree, appending everthing that comes AFTER parentIndex
+            let p = n;
+            let pp = p.#parent;
+            while (pp) {
+                for (let i = p.#parentIndex + 1; !pp.type && i < pp.#parts.length; i++) {
+                    for (const part of n.#parts) {
+                        /* c8 ignore start */
+                        if (typeof part === 'string') {
+                            throw new Error('string part in extglob AST??');
+                        }
+                        /* c8 ignore stop */
+                        part.copyIn(pp.#parts[i]);
+                    }
+                }
+                p = pp;
+                pp = p.#parent;
+            }
+        }
+        return this;
+    }
+    push(...parts) {
+        for (const p of parts) {
+            if (p === '')
+                continue;
+            /* c8 ignore start */
+            if (typeof p !== 'string' &&
+                !(p instanceof _a && p.#parent === this)) {
+                throw new Error('invalid part: ' + p);
+            }
+            /* c8 ignore stop */
+            this.#parts.push(p);
+        }
+    }
+    toJSON() {
+        const ret = this.type === null ?
+            this.#parts
+                .slice()
+                .map(p => (typeof p === 'string' ? p : p.toJSON()))
+            : [this.type, ...this.#parts.map(p => p.toJSON())];
+        if (this.isStart() && !this.type)
+            ret.unshift([]);
+        if (this.isEnd() &&
+            (this === this.#root ||
+                (this.#root.#filledNegs && this.#parent?.type === '!'))) {
+            ret.push({});
+        }
+        return ret;
+    }
+    isStart() {
+        if (this.#root === this)
+            return true;
+        // if (this.type) return !!this.#parent?.isStart()
+        if (!this.#parent?.isStart())
+            return false;
+        if (this.#parentIndex === 0)
+            return true;
+        // if everything AHEAD of this is a negation, then it's still the "start"
+        const p = this.#parent;
+        for (let i = 0; i < this.#parentIndex; i++) {
+            const pp = p.#parts[i];
+            if (!(pp instanceof _a && pp.type === '!')) {
+                return false;
+            }
+        }
+        return true;
+    }
+    isEnd() {
+        if (this.#root === this)
+            return true;
+        if (this.#parent?.type === '!')
+            return true;
+        if (!this.#parent?.isEnd())
+            return false;
+        if (!this.type)
+            return this.#parent?.isEnd();
+        // if not root, it'll always have a parent
+        /* c8 ignore start */
+        const pl = this.#parent ? this.#parent.#parts.length : 0;
+        /* c8 ignore stop */
+        return this.#parentIndex === pl - 1;
+    }
+    copyIn(part) {
+        if (typeof part === 'string')
+            this.push(part);
+        else
+            this.push(part.clone(this));
+    }
+    clone(parent) {
+        const c = new _a(this.type, parent);
+        for (const p of this.#parts) {
+            c.copyIn(p);
+        }
+        return c;
+    }
+    static #parseAST(str, ast, pos, opt, extDepth) {
+        const maxDepth = opt.maxExtglobRecursion ?? 2;
+        let escaping = false;
+        let inBrace = false;
+        let braceStart = -1;
+        let braceNeg = false;
+        if (ast.type === null) {
+            // outside of a extglob, append until we find a start
+            let i = pos;
+            let acc = '';
+            while (i < str.length) {
+                const c = str.charAt(i++);
+                // still accumulate escapes at this point, but we do ignore
+                // starts that are escaped
+                if (escaping || c === '\\') {
+                    escaping = !escaping;
+                    acc += c;
+                    continue;
+                }
+                if (inBrace) {
+                    if (i === braceStart + 1) {
+                        if (c === '^' || c === '!') {
+                            braceNeg = true;
+                        }
+                    }
+                    else if (c === ']' && !(i === braceStart + 2 && braceNeg)) {
+                        inBrace = false;
+                    }
+                    acc += c;
+                    continue;
+                }
+                else if (c === '[') {
+                    inBrace = true;
+                    braceStart = i;
+                    braceNeg = false;
+                    acc += c;
+                    continue;
+                }
+                // we don't have to check for adoption here, because that's
+                // done at the other recursion point.
+                const doRecurse = !opt.noext &&
+                    isExtglobType(c) &&
+                    str.charAt(i) === '(' &&
+                    extDepth <= maxDepth;
+                if (doRecurse) {
+                    ast.push(acc);
+                    acc = '';
+                    const ext = new _a(c, ast);
+                    i = _a.#parseAST(str, ext, i, opt, extDepth + 1);
+                    ast.push(ext);
+                    continue;
+                }
+                acc += c;
+            }
+            ast.push(acc);
+            return i;
+        }
+        // some kind of extglob, pos is at the (
+        // find the next | or )
+        let i = pos + 1;
+        let part = new _a(null, ast);
+        const parts = [];
+        let acc = '';
+        while (i < str.length) {
+            const c = str.charAt(i++);
+            // still accumulate escapes at this point, but we do ignore
+            // starts that are escaped
+            if (escaping || c === '\\') {
+                escaping = !escaping;
+                acc += c;
+                continue;
+            }
+            if (inBrace) {
+                if (i === braceStart + 1) {
+                    if (c === '^' || c === '!') {
+                        braceNeg = true;
+                    }
+                }
+                else if (c === ']' && !(i === braceStart + 2 && braceNeg)) {
+                    inBrace = false;
+                }
+                acc += c;
+                continue;
+            }
+            else if (c === '[') {
+                inBrace = true;
+                braceStart = i;
+                braceNeg = false;
+                acc += c;
+                continue;
+            }
+            const doRecurse = !opt.noext &&
+                isExtglobType(c) &&
+                str.charAt(i) === '(' &&
+                /* c8 ignore start - the maxDepth is sufficient here */
+                (extDepth <= maxDepth || (ast && ast.#canAdoptType(c)));
+            /* c8 ignore stop */
+            if (doRecurse) {
+                const depthAdd = ast && ast.#canAdoptType(c) ? 0 : 1;
+                part.push(acc);
+                acc = '';
+                const ext = new _a(c, part);
+                part.push(ext);
+                i = _a.#parseAST(str, ext, i, opt, extDepth + depthAdd);
+                continue;
+            }
+            if (c === '|') {
+                part.push(acc);
+                acc = '';
+                parts.push(part);
+                part = new _a(null, ast);
+                continue;
+            }
+            if (c === ')') {
+                if (acc === '' && ast.#parts.length === 0) {
+                    ast.#emptyExt = true;
+                }
+                part.push(acc);
+                acc = '';
+                ast.push(...parts, part);
+                return i;
+            }
+            acc += c;
+        }
+        // unfinished extglob
+        // if we got here, it was a malformed extglob! not an extglob, but
+        // maybe something else in there.
+        ast.type = null;
+        ast.#hasMagic = undefined;
+        ast.#parts = [str.substring(pos - 1)];
+        return i;
+    }
+    #canAdoptWithSpace(child) {
+        return this.#canAdopt(child, adoptionWithSpaceMap);
+    }
+    #canAdopt(child, map = adoptionMap) {
+        if (!child ||
+            typeof child !== 'object' ||
+            child.type !== null ||
+            child.#parts.length !== 1 ||
+            this.type === null) {
+            return false;
+        }
+        const gc = child.#parts[0];
+        if (!gc || typeof gc !== 'object' || gc.type === null) {
+            return false;
+        }
+        return this.#canAdoptType(gc.type, map);
+    }
+    #canAdoptType(c, map = adoptionAnyMap) {
+        return !!map.get(this.type)?.includes(c);
+    }
+    #adoptWithSpace(child, index) {
+        const gc = child.#parts[0];
+        const blank = new _a(null, gc, this.options);
+        blank.#parts.push('');
+        gc.push(blank);
+        this.#adopt(child, index);
+    }
+    #adopt(child, index) {
+        const gc = child.#parts[0];
+        this.#parts.splice(index, 1, ...gc.#parts);
+        for (const p of gc.#parts) {
+            if (typeof p === 'object')
+                p.#parent = this;
+        }
+        this.#toString = undefined;
+    }
+    #canUsurpType(c) {
+        const m = usurpMap.get(this.type);
+        return !!m?.has(c);
+    }
+    #canUsurp(child) {
+        if (!child ||
+            typeof child !== 'object' ||
+            child.type !== null ||
+            child.#parts.length !== 1 ||
+            this.type === null ||
+            this.#parts.length !== 1) {
+            return false;
+        }
+        const gc = child.#parts[0];
+        if (!gc || typeof gc !== 'object' || gc.type === null) {
+            return false;
+        }
+        return this.#canUsurpType(gc.type);
+    }
+    #usurp(child) {
+        const m = usurpMap.get(this.type);
+        const gc = child.#parts[0];
+        const nt = m?.get(gc.type);
+        /* c8 ignore start - impossible */
+        if (!nt)
+            return false;
+        /* c8 ignore stop */
+        this.#parts = gc.#parts;
+        for (const p of this.#parts) {
+            if (typeof p === 'object') {
+                p.#parent = this;
+            }
+        }
+        this.type = nt;
+        this.#toString = undefined;
+        this.#emptyExt = false;
+    }
+    static fromGlob(pattern, options = {}) {
+        const ast = new _a(null, undefined, options);
+        _a.#parseAST(pattern, ast, 0, options, 0);
+        return ast;
+    }
+    // returns the regular expression if there's magic, or the unescaped
+    // string if not.
+    toMMPattern() {
+        // should only be called on root
+        /* c8 ignore start */
+        if (this !== this.#root)
+            return this.#root.toMMPattern();
+        /* c8 ignore stop */
+        const glob = this.toString();
+        const [re, body, hasMagic, uflag] = this.toRegExpSource();
+        // if we're in nocase mode, and not nocaseMagicOnly, then we do
+        // still need a regular expression if we have to case-insensitively
+        // match capital/lowercase characters.
+        const anyMagic = hasMagic ||
+            this.#hasMagic ||
+            (this.#options.nocase &&
+                !this.#options.nocaseMagicOnly &&
+                glob.toUpperCase() !== glob.toLowerCase());
+        if (!anyMagic) {
+            return body;
+        }
+        const flags = (this.#options.nocase ? 'i' : '') + (uflag ? 'u' : '');
+        return Object.assign(new RegExp(`^${re}$`, flags), {
+            _src: re,
+            _glob: glob,
+        });
+    }
+    get options() {
+        return this.#options;
+    }
+    // returns the string match, the regexp source, whether there's magic
+    // in the regexp (so a regular expression is required) and whether or
+    // not the uflag is needed for the regular expression (for posix classes)
+    // TODO: instead of injecting the start/end at this point, just return
+    // the BODY of the regexp, along with the start/end portions suitable
+    // for binding the start/end in either a joined full-path makeRe context
+    // (where we bind to (^|/), or a standalone matchPart context (where
+    // we bind to ^, and not /).  Otherwise slashes get duped!
+    //
+    // In part-matching mode, the start is:
+    // - if not isStart: nothing
+    // - if traversal possible, but not allowed: ^(?!\.\.?$)
+    // - if dots allowed or not possible: ^
+    // - if dots possible and not allowed: ^(?!\.)
+    // end is:
+    // - if not isEnd(): nothing
+    // - else: $
+    //
+    // In full-path matching mode, we put the slash at the START of the
+    // pattern, so start is:
+    // - if first pattern: same as part-matching mode
+    // - if not isStart(): nothing
+    // - if traversal possible, but not allowed: /(?!\.\.?(?:$|/))
+    // - if dots allowed or not possible: /
+    // - if dots possible and not allowed: /(?!\.)
+    // end is:
+    // - if last pattern, same as part-matching mode
+    // - else nothing
+    //
+    // Always put the (?:$|/) on negated tails, though, because that has to be
+    // there to bind the end of the negated pattern portion, and it's easier to
+    // just stick it in now rather than try to inject it later in the middle of
+    // the pattern.
+    //
+    // We can just always return the same end, and leave it up to the caller
+    // to know whether it's going to be used joined or in parts.
+    // And, if the start is adjusted slightly, can do the same there:
+    // - if not isStart: nothing
+    // - if traversal possible, but not allowed: (?:/|^)(?!\.\.?$)
+    // - if dots allowed or not possible: (?:/|^)
+    // - if dots possible and not allowed: (?:/|^)(?!\.)
+    //
+    // But it's better to have a simpler binding without a conditional, for
+    // performance, so probably better to return both start options.
+    //
+    // Then the caller just ignores the end if it's not the first pattern,
+    // and the start always gets applied.
+    //
+    // But that's always going to be $ if it's the ending pattern, or nothing,
+    // so the caller can just attach $ at the end of the pattern when building.
+    //
+    // So the todo is:
+    // - better detect what kind of start is needed
+    // - return both flavors of starting pattern
+    // - attach $ at the end of the pattern when creating the actual RegExp
+    //
+    // Ah, but wait, no, that all only applies to the root when the first pattern
+    // is not an extglob. If the first pattern IS an extglob, then we need all
+    // that dot prevention biz to live in the extglob portions, because eg
+    // +(*|.x*) can match .xy but not .yx.
+    //
+    // So, return the two flavors if it's #root and the first child is not an
+    // AST, otherwise leave it to the child AST to handle it, and there,
+    // use the (?:^|/) style of start binding.
+    //
+    // Even simplified further:
+    // - Since the start for a join is eg /(?!\.) and the start for a part
+    // is ^(?!\.), we can just prepend (?!\.) to the pattern (either root
+    // or start or whatever) and prepend ^ or / at the Regexp construction.
+    toRegExpSource(allowDot) {
+        const dot = allowDot ?? !!this.#options.dot;
+        if (this.#root === this) {
+            this.#flatten();
+            this.#fillNegs();
+        }
+        if (!isExtglobAST(this)) {
+            const noEmpty = this.isStart() &&
+                this.isEnd() &&
+                !this.#parts.some(s => typeof s !== 'string');
+            const src = this.#parts
+                .map(p => {
+                const [re, _, hasMagic, uflag] = typeof p === 'string' ?
+                    _a.#parseGlob(p, this.#hasMagic, noEmpty)
+                    : p.toRegExpSource(allowDot);
+                this.#hasMagic = this.#hasMagic || hasMagic;
+                this.#uflag = this.#uflag || uflag;
+                return re;
+            })
+                .join('');
+            let start = '';
+            if (this.isStart()) {
+                if (typeof this.#parts[0] === 'string') {
+                    // this is the string that will match the start of the pattern,
+                    // so we need to protect against dots and such.
+                    // '.' and '..' cannot match unless the pattern is that exactly,
+                    // even if it starts with . or dot:true is set.
+                    const dotTravAllowed = this.#parts.length === 1 && justDots.has(this.#parts[0]);
+                    if (!dotTravAllowed) {
+                        const aps = addPatternStart;
+                        // check if we have a possibility of matching . or ..,
+                        // and prevent that.
+                        const needNoTrav = 
+                        // dots are allowed, and the pattern starts with [ or .
+                        (dot && aps.has(src.charAt(0))) ||
+                            // the pattern starts with \., and then [ or .
+                            (src.startsWith('\\.') && aps.has(src.charAt(2))) ||
+                            // the pattern starts with \.\., and then [ or .
+                            (src.startsWith('\\.\\.') && aps.has(src.charAt(4)));
+                        // no need to prevent dots if it can't match a dot, or if a
+                        // sub-pattern will be preventing it anyway.
+                        const needNoDot = !dot && !allowDot && aps.has(src.charAt(0));
+                        start =
+                            needNoTrav ? startNoTraversal
+                                : needNoDot ? startNoDot
+                                    : '';
+                    }
+                }
+            }
+            // append the "end of path portion" pattern to negation tails
+            let end = '';
+            if (this.isEnd() &&
+                this.#root.#filledNegs &&
+                this.#parent?.type === '!') {
+                end = '(?:$|\\/)';
+            }
+            const final = start + src + end;
+            return [
+                final,
+                unescape(src),
+                (this.#hasMagic = !!this.#hasMagic),
+                this.#uflag,
+            ];
+        }
+        // We need to calculate the body *twice* if it's a repeat pattern
+        // at the start, once in nodot mode, then again in dot mode, so a
+        // pattern like *(?) can match 'x.y'
+        const repeated = this.type === '*' || this.type === '+';
+        // some kind of extglob
+        const start = this.type === '!' ? '(?:(?!(?:' : '(?:';
+        let body = this.#partsToRegExp(dot);
+        if (this.isStart() && this.isEnd() && !body && this.type !== '!') {
+            // invalid extglob, has to at least be *something* present, if it's
+            // the entire path portion.
+            const s = this.toString();
+            const me = this;
+            me.#parts = [s];
+            me.type = null;
+            me.#hasMagic = undefined;
+            return [s, unescape(this.toString()), false, false];
+        }
+        let bodyDotAllowed = !repeated || allowDot || dot || !startNoDot ?
+            ''
+            : this.#partsToRegExp(true);
+        if (bodyDotAllowed === body) {
+            bodyDotAllowed = '';
+        }
+        if (bodyDotAllowed) {
+            body = `(?:${body})(?:${bodyDotAllowed})*?`;
+        }
+        // an empty !() is exactly equivalent to a starNoEmpty
+        let final = '';
+        if (this.type === '!' && this.#emptyExt) {
+            final = (this.isStart() && !dot ? startNoDot : '') + starNoEmpty;
+        }
+        else {
+            const close = this.type === '!' ?
+                // !() must match something,but !(x) can match ''
+                '))' +
+                    (this.isStart() && !dot && !allowDot ? startNoDot : '') +
+                    star$1 +
+                    ')'
+                : this.type === '@' ? ')'
+                    : this.type === '?' ? ')?'
+                        : this.type === '+' && bodyDotAllowed ? ')'
+                            : this.type === '*' && bodyDotAllowed ? `)?`
+                                : `)${this.type}`;
+            final = start + body + close;
+        }
+        return [
+            final,
+            unescape(body),
+            (this.#hasMagic = !!this.#hasMagic),
+            this.#uflag,
+        ];
+    }
+    #flatten() {
+        if (!isExtglobAST(this)) {
+            for (const p of this.#parts) {
+                if (typeof p === 'object') {
+                    p.#flatten();
+                }
+            }
+        }
+        else {
+            // do up to 10 passes to flatten as much as possible
+            let iterations = 0;
+            let done = false;
+            do {
+                done = true;
+                for (let i = 0; i < this.#parts.length; i++) {
+                    const c = this.#parts[i];
+                    if (typeof c === 'object') {
+                        c.#flatten();
+                        if (this.#canAdopt(c)) {
+                            done = false;
+                            this.#adopt(c, i);
+                        }
+                        else if (this.#canAdoptWithSpace(c)) {
+                            done = false;
+                            this.#adoptWithSpace(c, i);
+                        }
+                        else if (this.#canUsurp(c)) {
+                            done = false;
+                            this.#usurp(c);
+                        }
+                    }
+                }
+            } while (!done && ++iterations < 10);
+        }
+        this.#toString = undefined;
+    }
+    #partsToRegExp(dot) {
+        return this.#parts
+            .map(p => {
+            // extglob ASTs should only contain parent ASTs
+            /* c8 ignore start */
+            if (typeof p === 'string') {
+                throw new Error('string type in extglob ast??');
+            }
+            /* c8 ignore stop */
+            // can ignore hasMagic, because extglobs are already always magic
+            const [re, _, _hasMagic, uflag] = p.toRegExpSource(dot);
+            this.#uflag = this.#uflag || uflag;
+            return re;
+        })
+            .filter(p => !(this.isStart() && this.isEnd()) || !!p)
+            .join('|');
+    }
+    static #parseGlob(glob, hasMagic, noEmpty = false) {
+        let escaping = false;
+        let re = '';
+        let uflag = false;
+        // multiple stars that aren't globstars coalesce into one *
+        let inStar = false;
+        for (let i = 0; i < glob.length; i++) {
+            const c = glob.charAt(i);
+            if (escaping) {
+                escaping = false;
+                re += (reSpecials.has(c) ? '\\' : '') + c;
+                continue;
+            }
+            if (c === '*') {
+                if (inStar)
+                    continue;
+                inStar = true;
+                re += noEmpty && /^[*]+$/.test(glob) ? starNoEmpty : star$1;
+                hasMagic = true;
+                continue;
+            }
+            else {
+                inStar = false;
+            }
+            if (c === '\\') {
+                if (i === glob.length - 1) {
+                    re += '\\\\';
+                }
+                else {
+                    escaping = true;
+                }
+                continue;
+            }
+            if (c === '[') {
+                const [src, needUflag, consumed, magic] = parseClass(glob, i);
+                if (consumed) {
+                    re += src;
+                    uflag = uflag || needUflag;
+                    i += consumed - 1;
+                    hasMagic = hasMagic || magic;
+                    continue;
+                }
+            }
+            if (c === '?') {
+                re += qmark$1;
+                hasMagic = true;
+                continue;
+            }
+            re += regExpEscape$1(c);
+        }
+        return [re, unescape(glob), !!hasMagic, uflag];
+    }
+}
+_a = AST;
+
+/**
+ * Escape all magic characters in a glob pattern.
+ *
+ * If the {@link MinimatchOptions.windowsPathsNoEscape}
+ * option is used, then characters are escaped by wrapping in `[]`, because
+ * a magic character wrapped in a character class can only be satisfied by
+ * that exact character.  In this mode, `\` is _not_ escaped, because it is
+ * not interpreted as a magic character, but instead as a path separator.
+ *
+ * If the {@link MinimatchOptions.magicalBraces} option is used,
+ * then braces (`{` and `}`) will be escaped.
+ */
+const escape$1 = (s, { windowsPathsNoEscape = false, magicalBraces = false, } = {}) => {
+    // don't need to escape +@! because we escape the parens
+    // that make those magic, and escaping ! as [!] isn't valid,
+    // because [!]] is a valid glob class meaning not ']'.
+    if (magicalBraces) {
+        return windowsPathsNoEscape ?
+            s.replace(/[?*()[\]{}]/g, '[$&]')
+            : s.replace(/[?*()[\]\\{}]/g, '\\$&');
+    }
+    return windowsPathsNoEscape ?
+        s.replace(/[?*()[\]]/g, '[$&]')
+        : s.replace(/[?*()[\]\\]/g, '\\$&');
+};
+
+const minimatch$1 = (p, pattern, options = {}) => {
+    assertValidPattern(pattern);
+    // shortcut: comments match nothing.
+    if (!options.nocomment && pattern.charAt(0) === '#') {
+        return false;
+    }
+    return new Minimatch$1(pattern, options).match(p);
+};
+// Optimized checking for the most common glob patterns.
+const starDotExtRE = /^\*+([^+@!?*[(]*)$/;
+const starDotExtTest = (ext) => (f) => !f.startsWith('.') && f.endsWith(ext);
+const starDotExtTestDot = (ext) => (f) => f.endsWith(ext);
+const starDotExtTestNocase = (ext) => {
+    ext = ext.toLowerCase();
+    return (f) => !f.startsWith('.') && f.toLowerCase().endsWith(ext);
+};
+const starDotExtTestNocaseDot = (ext) => {
+    ext = ext.toLowerCase();
+    return (f) => f.toLowerCase().endsWith(ext);
+};
+const starDotStarRE = /^\*+\.\*+$/;
+const starDotStarTest = (f) => !f.startsWith('.') && f.includes('.');
+const starDotStarTestDot = (f) => f !== '.' && f !== '..' && f.includes('.');
+const dotStarRE = /^\.\*+$/;
+const dotStarTest = (f) => f !== '.' && f !== '..' && f.startsWith('.');
+const starRE = /^\*+$/;
+const starTest = (f) => f.length !== 0 && !f.startsWith('.');
+const starTestDot = (f) => f.length !== 0 && f !== '.' && f !== '..';
+const qmarksRE = /^\?+([^+@!?*[(]*)?$/;
+const qmarksTestNocase = ([$0, ext = '']) => {
+    const noext = qmarksTestNoExt([$0]);
+    if (!ext)
+        return noext;
+    ext = ext.toLowerCase();
+    return (f) => noext(f) && f.toLowerCase().endsWith(ext);
+};
+const qmarksTestNocaseDot = ([$0, ext = '']) => {
+    const noext = qmarksTestNoExtDot([$0]);
+    if (!ext)
+        return noext;
+    ext = ext.toLowerCase();
+    return (f) => noext(f) && f.toLowerCase().endsWith(ext);
+};
+const qmarksTestDot = ([$0, ext = '']) => {
+    const noext = qmarksTestNoExtDot([$0]);
+    return !ext ? noext : (f) => noext(f) && f.endsWith(ext);
+};
+const qmarksTest = ([$0, ext = '']) => {
+    const noext = qmarksTestNoExt([$0]);
+    return !ext ? noext : (f) => noext(f) && f.endsWith(ext);
+};
+const qmarksTestNoExt = ([$0]) => {
+    const len = $0.length;
+    return (f) => f.length === len && !f.startsWith('.');
+};
+const qmarksTestNoExtDot = ([$0]) => {
+    const len = $0.length;
+    return (f) => f.length === len && f !== '.' && f !== '..';
+};
+/* c8 ignore start */
+const defaultPlatform = (typeof process === 'object' && process ?
+    (typeof process.env === 'object' &&
+        process.env &&
+        process.env.__MINIMATCH_TESTING_PLATFORM__) ||
+        process.platform
+    : 'posix');
+const path = {
+    win32: { sep: '\\' },
+    posix: { sep: '/' },
+};
+/* c8 ignore stop */
+const sep = defaultPlatform === 'win32' ? path.win32.sep : path.posix.sep;
+minimatch$1.sep = sep;
+const GLOBSTAR = Symbol('globstar **');
+minimatch$1.GLOBSTAR = GLOBSTAR;
+// any single thing other than /
+// don't need to escape / when using new RegExp()
+const qmark = '[^/]';
+// * => any number of characters
+const star = qmark + '*?';
+// ** when dots are allowed.  Anything goes, except .. and .
+// not (^ or / followed by one or two dots followed by $ or /),
+// followed by anything, any number of times.
+const twoStarDot = '(?:(?!(?:\\/|^)(?:\\.{1,2})($|\\/)).)*?';
+// not a ^ or / followed by a dot,
+// followed by anything, any number of times.
+const twoStarNoDot = '(?:(?!(?:\\/|^)\\.).)*?';
+const filter = (pattern, options = {}) => (p) => minimatch$1(p, pattern, options);
+minimatch$1.filter = filter;
+const ext = (a, b = {}) => Object.assign({}, a, b);
+const defaults = (def) => {
+    if (!def || typeof def !== 'object' || !Object.keys(def).length) {
+        return minimatch$1;
+    }
+    const orig = minimatch$1;
+    const m = (p, pattern, options = {}) => orig(p, pattern, ext(def, options));
+    return Object.assign(m, {
+        Minimatch: class Minimatch extends orig.Minimatch {
+            constructor(pattern, options = {}) {
+                super(pattern, ext(def, options));
+            }
+            static defaults(options) {
+                return orig.defaults(ext(def, options)).Minimatch;
+            }
+        },
+        AST: class AST extends orig.AST {
+            /* c8 ignore start */
+            constructor(type, parent, options = {}) {
+                super(type, parent, ext(def, options));
+            }
+            /* c8 ignore stop */
+            static fromGlob(pattern, options = {}) {
+                return orig.AST.fromGlob(pattern, ext(def, options));
+            }
+        },
+        unescape: (s, options = {}) => orig.unescape(s, ext(def, options)),
+        escape: (s, options = {}) => orig.escape(s, ext(def, options)),
+        filter: (pattern, options = {}) => orig.filter(pattern, ext(def, options)),
+        defaults: (options) => orig.defaults(ext(def, options)),
+        makeRe: (pattern, options = {}) => orig.makeRe(pattern, ext(def, options)),
+        braceExpand: (pattern, options = {}) => orig.braceExpand(pattern, ext(def, options)),
+        match: (list, pattern, options = {}) => orig.match(list, pattern, ext(def, options)),
+        sep: orig.sep,
+        GLOBSTAR: GLOBSTAR,
+    });
+};
+minimatch$1.defaults = defaults;
+// Brace expansion:
+// a{b,c}d -> abd acd
+// a{b,}c -> abc ac
+// a{0..3}d -> a0d a1d a2d a3d
+// a{b,c{d,e}f}g -> abg acdfg acefg
+// a{b,c}d{e,f}g -> abdeg acdeg abdeg abdfg
+//
+// Invalid sets are not expanded.
+// a{2..}b -> a{2..}b
+// a{b}c -> a{b}c
+const braceExpand = (pattern, options = {}) => {
+    assertValidPattern(pattern);
+    // Thanks to Yeting Li <https://github.com/yetingli> for
+    // improving this regexp to avoid a ReDOS vulnerability.
+    if (options.nobrace || !/\{(?:(?!\{).)*\}/.test(pattern)) {
+        // shortcut. no need to expand.
+        return [pattern];
+    }
+    return expand(pattern, { max: options.braceExpandMax });
+};
+minimatch$1.braceExpand = braceExpand;
+// parse a component of the expanded set.
+// At this point, no pattern may contain "/" in it
+// so we're going to return a 2d array, where each entry is the full
+// pattern, split on '/', and then turned into a regular expression.
+// A regexp is made at the end which joins each array with an
+// escaped /, and another full one which joins each regexp with |.
+//
+// Following the lead of Bash 4.1, note that "**" only has special meaning
+// when it is the *only* thing in a path portion.  Otherwise, any series
+// of * is equivalent to a single *.  Globstar behavior is enabled by
+// default, and can be disabled by setting options.noglobstar.
+const makeRe = (pattern, options = {}) => new Minimatch$1(pattern, options).makeRe();
+minimatch$1.makeRe = makeRe;
+const match = (list, pattern, options = {}) => {
+    const mm = new Minimatch$1(pattern, options);
+    list = list.filter(f => mm.match(f));
+    if (mm.options.nonull && !list.length) {
+        list.push(pattern);
+    }
+    return list;
+};
+minimatch$1.match = match;
+// replace stuff like \* with *
+const globMagic = /[?*]|[+@!]\(.*?\)|\[|\]/;
+const regExpEscape = (s) => s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+let Minimatch$1 = class Minimatch {
+    options;
+    set;
+    pattern;
+    windowsPathsNoEscape;
+    nonegate;
+    negate;
+    comment;
+    empty;
+    preserveMultipleSlashes;
+    partial;
+    globSet;
+    globParts;
+    nocase;
+    isWindows;
+    platform;
+    windowsNoMagicRoot;
+    maxGlobstarRecursion;
+    regexp;
+    constructor(pattern, options = {}) {
+        assertValidPattern(pattern);
+        options = options || {};
+        this.options = options;
+        this.maxGlobstarRecursion = options.maxGlobstarRecursion ?? 200;
+        this.pattern = pattern;
+        this.platform = options.platform || defaultPlatform;
+        this.isWindows = this.platform === 'win32';
+        // avoid the annoying deprecation flag lol
+        const awe = ('allowWindow' + 'sEscape');
+        this.windowsPathsNoEscape =
+            !!options.windowsPathsNoEscape || options[awe] === false;
+        if (this.windowsPathsNoEscape) {
+            this.pattern = this.pattern.replace(/\\/g, '/');
+        }
+        this.preserveMultipleSlashes = !!options.preserveMultipleSlashes;
+        this.regexp = null;
+        this.negate = false;
+        this.nonegate = !!options.nonegate;
+        this.comment = false;
+        this.empty = false;
+        this.partial = !!options.partial;
+        this.nocase = !!this.options.nocase;
+        this.windowsNoMagicRoot =
+            options.windowsNoMagicRoot !== undefined ?
+                options.windowsNoMagicRoot
+                : !!(this.isWindows && this.nocase);
+        this.globSet = [];
+        this.globParts = [];
+        this.set = [];
+        // make the set of regexps etc.
+        this.make();
+    }
+    hasMagic() {
+        if (this.options.magicalBraces && this.set.length > 1) {
+            return true;
+        }
+        for (const pattern of this.set) {
+            for (const part of pattern) {
+                if (typeof part !== 'string')
+                    return true;
+            }
+        }
+        return false;
+    }
+    debug(..._) { }
+    make() {
+        const pattern = this.pattern;
+        const options = this.options;
+        // empty patterns and comments match nothing.
+        if (!options.nocomment && pattern.charAt(0) === '#') {
+            this.comment = true;
+            return;
+        }
+        if (!pattern) {
+            this.empty = true;
+            return;
+        }
+        // step 1: figure out negation, etc.
+        this.parseNegate();
+        // step 2: expand braces
+        this.globSet = [...new Set(this.braceExpand())];
+        if (options.debug) {
+            //oxlint-disable-next-line no-console
+            this.debug = (...args) => console.error(...args);
+        }
+        this.debug(this.pattern, this.globSet);
+        // step 3: now we have a set, so turn each one into a series of
+        // path-portion matching patterns.
+        // These will be regexps, except in the case of "**", which is
+        // set to the GLOBSTAR object for globstar behavior,
+        // and will not contain any / characters
+        //
+        // First, we preprocess to make the glob pattern sets a bit simpler
+        // and deduped.  There are some perf-killing patterns that can cause
+        // problems with a glob walk, but we can simplify them down a bit.
+        const rawGlobParts = this.globSet.map(s => this.slashSplit(s));
+        this.globParts = this.preprocess(rawGlobParts);
+        this.debug(this.pattern, this.globParts);
+        // glob --> regexps
+        let set = this.globParts.map((s, _, __) => {
+            if (this.isWindows && this.windowsNoMagicRoot) {
+                // check if it's a drive or unc path.
+                const isUNC = s[0] === '' &&
+                    s[1] === '' &&
+                    (s[2] === '?' || !globMagic.test(s[2])) &&
+                    !globMagic.test(s[3]);
+                const isDrive = /^[a-z]:/i.test(s[0]);
+                if (isUNC) {
+                    return [
+                        ...s.slice(0, 4),
+                        ...s.slice(4).map(ss => this.parse(ss)),
+                    ];
+                }
+                else if (isDrive) {
+                    return [s[0], ...s.slice(1).map(ss => this.parse(ss))];
+                }
+            }
+            return s.map(ss => this.parse(ss));
+        });
+        this.debug(this.pattern, set);
+        // filter out everything that didn't compile properly.
+        this.set = set.filter(s => s.indexOf(false) === -1);
+        // do not treat the ? in UNC paths as magic
+        if (this.isWindows) {
+            for (let i = 0; i < this.set.length; i++) {
+                const p = this.set[i];
+                if (p[0] === '' &&
+                    p[1] === '' &&
+                    this.globParts[i][2] === '?' &&
+                    typeof p[3] === 'string' &&
+                    /^[a-z]:$/i.test(p[3])) {
+                    p[2] = '?';
+                }
+            }
+        }
+        this.debug(this.pattern, this.set);
+    }
+    // various transforms to equivalent pattern sets that are
+    // faster to process in a filesystem walk.  The goal is to
+    // eliminate what we can, and push all ** patterns as far
+    // to the right as possible, even if it increases the number
+    // of patterns that we have to process.
+    preprocess(globParts) {
+        // if we're not in globstar mode, then turn ** into *
+        if (this.options.noglobstar) {
+            for (const partset of globParts) {
+                for (let j = 0; j < partset.length; j++) {
+                    if (partset[j] === '**') {
+                        partset[j] = '*';
+                    }
+                }
+            }
+        }
+        const { optimizationLevel = 1 } = this.options;
+        if (optimizationLevel >= 2) {
+            // aggressive optimization for the purpose of fs walking
+            globParts = this.firstPhasePreProcess(globParts);
+            globParts = this.secondPhasePreProcess(globParts);
+        }
+        else if (optimizationLevel >= 1) {
+            // just basic optimizations to remove some .. parts
+            globParts = this.levelOneOptimize(globParts);
+        }
+        else {
+            // just collapse multiple ** portions into one
+            globParts = this.adjascentGlobstarOptimize(globParts);
+        }
+        return globParts;
+    }
+    // just get rid of adjascent ** portions
+    adjascentGlobstarOptimize(globParts) {
+        return globParts.map(parts => {
+            let gs = -1;
+            while (-1 !== (gs = parts.indexOf('**', gs + 1))) {
+                let i = gs;
+                while (parts[i + 1] === '**') {
+                    i++;
+                }
+                if (i !== gs) {
+                    parts.splice(gs, i - gs);
+                }
+            }
+            return parts;
+        });
+    }
+    // get rid of adjascent ** and resolve .. portions
+    levelOneOptimize(globParts) {
+        return globParts.map(parts => {
+            parts = parts.reduce((set, part) => {
+                const prev = set[set.length - 1];
+                if (part === '**' && prev === '**') {
+                    return set;
+                }
+                if (part === '..') {
+                    if (prev && prev !== '..' && prev !== '.' && prev !== '**') {
+                        set.pop();
+                        return set;
+                    }
+                }
+                set.push(part);
+                return set;
+            }, []);
+            return parts.length === 0 ? [''] : parts;
+        });
+    }
+    levelTwoFileOptimize(parts) {
+        if (!Array.isArray(parts)) {
+            parts = this.slashSplit(parts);
+        }
+        let didSomething = false;
+        do {
+            didSomething = false;
+            // <pre>/<e>/<rest> -> <pre>/<rest>
+            if (!this.preserveMultipleSlashes) {
+                for (let i = 1; i < parts.length - 1; i++) {
+                    const p = parts[i];
+                    // don't squeeze out UNC patterns
+                    if (i === 1 && p === '' && parts[0] === '')
+                        continue;
+                    if (p === '.' || p === '') {
+                        didSomething = true;
+                        parts.splice(i, 1);
+                        i--;
+                    }
+                }
+                if (parts[0] === '.' &&
+                    parts.length === 2 &&
+                    (parts[1] === '.' || parts[1] === '')) {
+                    didSomething = true;
+                    parts.pop();
+                }
+            }
+            // <pre>/<p>/../<rest> -> <pre>/<rest>
+            let dd = 0;
+            while (-1 !== (dd = parts.indexOf('..', dd + 1))) {
+                const p = parts[dd - 1];
+                if (p &&
+                    p !== '.' &&
+                    p !== '..' &&
+                    p !== '**' &&
+                    !(this.isWindows && /^[a-z]:$/i.test(p))) {
+                    didSomething = true;
+                    parts.splice(dd - 1, 2);
+                    dd -= 2;
+                }
+            }
+        } while (didSomething);
+        return parts.length === 0 ? [''] : parts;
+    }
+    // First phase: single-pattern processing
+    // <pre> is 1 or more portions
+    // <rest> is 1 or more portions
+    // <p> is any portion other than ., .., '', or **
+    // <e> is . or ''
+    //
+    // **/.. is *brutal* for filesystem walking performance, because
+    // it effectively resets the recursive walk each time it occurs,
+    // and ** cannot be reduced out by a .. pattern part like a regexp
+    // or most strings (other than .., ., and '') can be.
+    //
+    // <pre>/**/../<p>/<p>/<rest> -> {<pre>/../<p>/<p>/<rest>,<pre>/**/<p>/<p>/<rest>}
+    // <pre>/<e>/<rest> -> <pre>/<rest>
+    // <pre>/<p>/../<rest> -> <pre>/<rest>
+    // **/**/<rest> -> **/<rest>
+    //
+    // **/*/<rest> -> */**/<rest> <== not valid because ** doesn't follow
+    // this WOULD be allowed if ** did follow symlinks, or * didn't
+    firstPhasePreProcess(globParts) {
+        let didSomething = false;
+        do {
+            didSomething = false;
+            // <pre>/**/../<p>/<p>/<rest> -> {<pre>/../<p>/<p>/<rest>,<pre>/**/<p>/<p>/<rest>}
+            for (let parts of globParts) {
+                let gs = -1;
+                while (-1 !== (gs = parts.indexOf('**', gs + 1))) {
+                    let gss = gs;
+                    while (parts[gss + 1] === '**') {
+                        // <pre>/**/**/<rest> -> <pre>/**/<rest>
+                        gss++;
+                    }
+                    // eg, if gs is 2 and gss is 4, that means we have 3 **
+                    // parts, and can remove 2 of them.
+                    if (gss > gs) {
+                        parts.splice(gs + 1, gss - gs);
+                    }
+                    let next = parts[gs + 1];
+                    const p = parts[gs + 2];
+                    const p2 = parts[gs + 3];
+                    if (next !== '..')
+                        continue;
+                    if (!p ||
+                        p === '.' ||
+                        p === '..' ||
+                        !p2 ||
+                        p2 === '.' ||
+                        p2 === '..') {
+                        continue;
+                    }
+                    didSomething = true;
+                    // edit parts in place, and push the new one
+                    parts.splice(gs, 1);
+                    const other = parts.slice(0);
+                    other[gs] = '**';
+                    globParts.push(other);
+                    gs--;
+                }
+                // <pre>/<e>/<rest> -> <pre>/<rest>
+                if (!this.preserveMultipleSlashes) {
+                    for (let i = 1; i < parts.length - 1; i++) {
+                        const p = parts[i];
+                        // don't squeeze out UNC patterns
+                        if (i === 1 && p === '' && parts[0] === '')
+                            continue;
+                        if (p === '.' || p === '') {
+                            didSomething = true;
+                            parts.splice(i, 1);
+                            i--;
+                        }
+                    }
+                    if (parts[0] === '.' &&
+                        parts.length === 2 &&
+                        (parts[1] === '.' || parts[1] === '')) {
+                        didSomething = true;
+                        parts.pop();
+                    }
+                }
+                // <pre>/<p>/../<rest> -> <pre>/<rest>
+                let dd = 0;
+                while (-1 !== (dd = parts.indexOf('..', dd + 1))) {
+                    const p = parts[dd - 1];
+                    if (p && p !== '.' && p !== '..' && p !== '**') {
+                        didSomething = true;
+                        const needDot = dd === 1 && parts[dd + 1] === '**';
+                        const splin = needDot ? ['.'] : [];
+                        parts.splice(dd - 1, 2, ...splin);
+                        if (parts.length === 0)
+                            parts.push('');
+                        dd -= 2;
+                    }
+                }
+            }
+        } while (didSomething);
+        return globParts;
+    }
+    // second phase: multi-pattern dedupes
+    // {<pre>/*/<rest>,<pre>/<p>/<rest>} -> <pre>/*/<rest>
+    // {<pre>/<rest>,<pre>/<rest>} -> <pre>/<rest>
+    // {<pre>/**/<rest>,<pre>/<rest>} -> <pre>/**/<rest>
+    //
+    // {<pre>/**/<rest>,<pre>/**/<p>/<rest>} -> <pre>/**/<rest>
+    // ^-- not valid because ** doens't follow symlinks
+    secondPhasePreProcess(globParts) {
+        for (let i = 0; i < globParts.length - 1; i++) {
+            for (let j = i + 1; j < globParts.length; j++) {
+                const matched = this.partsMatch(globParts[i], globParts[j], !this.preserveMultipleSlashes);
+                if (matched) {
+                    globParts[i] = [];
+                    globParts[j] = matched;
+                    break;
+                }
+            }
+        }
+        return globParts.filter(gs => gs.length);
+    }
+    partsMatch(a, b, emptyGSMatch = false) {
+        let ai = 0;
+        let bi = 0;
+        let result = [];
+        let which = '';
+        while (ai < a.length && bi < b.length) {
+            if (a[ai] === b[bi]) {
+                result.push(which === 'b' ? b[bi] : a[ai]);
+                ai++;
+                bi++;
+            }
+            else if (emptyGSMatch && a[ai] === '**' && b[bi] === a[ai + 1]) {
+                result.push(a[ai]);
+                ai++;
+            }
+            else if (emptyGSMatch && b[bi] === '**' && a[ai] === b[bi + 1]) {
+                result.push(b[bi]);
+                bi++;
+            }
+            else if (a[ai] === '*' &&
+                b[bi] &&
+                (this.options.dot || !b[bi].startsWith('.')) &&
+                b[bi] !== '**') {
+                if (which === 'b')
+                    return false;
+                which = 'a';
+                result.push(a[ai]);
+                ai++;
+                bi++;
+            }
+            else if (b[bi] === '*' &&
+                a[ai] &&
+                (this.options.dot || !a[ai].startsWith('.')) &&
+                a[ai] !== '**') {
+                if (which === 'a')
+                    return false;
+                which = 'b';
+                result.push(b[bi]);
+                ai++;
+                bi++;
+            }
+            else {
+                return false;
+            }
+        }
+        // if we fall out of the loop, it means they two are identical
+        // as long as their lengths match
+        return a.length === b.length && result;
+    }
+    parseNegate() {
+        if (this.nonegate)
+            return;
+        const pattern = this.pattern;
+        let negate = false;
+        let negateOffset = 0;
+        for (let i = 0; i < pattern.length && pattern.charAt(i) === '!'; i++) {
+            negate = !negate;
+            negateOffset++;
+        }
+        if (negateOffset)
+            this.pattern = pattern.slice(negateOffset);
+        this.negate = negate;
+    }
+    // set partial to true to test if, for example,
+    // "/a/b" matches the start of "/*/b/*/d"
+    // Partial means, if you run out of file before you run
+    // out of pattern, then that's fine, as long as all
+    // the parts match.
+    matchOne(file, pattern, partial = false) {
+        let fileStartIndex = 0;
+        let patternStartIndex = 0;
+        // UNC paths like //?/X:/... can match X:/... and vice versa
+        // Drive letters in absolute drive or unc paths are always compared
+        // case-insensitively.
+        if (this.isWindows) {
+            const fileDrive = typeof file[0] === 'string' && /^[a-z]:$/i.test(file[0]);
+            const fileUNC = !fileDrive &&
+                file[0] === '' &&
+                file[1] === '' &&
+                file[2] === '?' &&
+                /^[a-z]:$/i.test(file[3]);
+            const patternDrive = typeof pattern[0] === 'string' && /^[a-z]:$/i.test(pattern[0]);
+            const patternUNC = !patternDrive &&
+                pattern[0] === '' &&
+                pattern[1] === '' &&
+                pattern[2] === '?' &&
+                typeof pattern[3] === 'string' &&
+                /^[a-z]:$/i.test(pattern[3]);
+            const fdi = fileUNC ? 3
+                : fileDrive ? 0
+                    : undefined;
+            const pdi = patternUNC ? 3
+                : patternDrive ? 0
+                    : undefined;
+            if (typeof fdi === 'number' && typeof pdi === 'number') {
+                const [fd, pd] = [
+                    file[fdi],
+                    pattern[pdi],
+                ];
+                // start matching at the drive letter index of each
+                if (fd.toLowerCase() === pd.toLowerCase()) {
+                    pattern[pdi] = fd;
+                    patternStartIndex = pdi;
+                    fileStartIndex = fdi;
+                }
+            }
+        }
+        // resolve and reduce . and .. portions in the file as well.
+        // don't need to do the second phase, because it's only one string[]
+        const { optimizationLevel = 1 } = this.options;
+        if (optimizationLevel >= 2) {
+            file = this.levelTwoFileOptimize(file);
+        }
+        if (pattern.includes(GLOBSTAR)) {
+            return this.#matchGlobstar(file, pattern, partial, fileStartIndex, patternStartIndex);
+        }
+        return this.#matchOne(file, pattern, partial, fileStartIndex, patternStartIndex);
+    }
+    #matchGlobstar(file, pattern, partial, fileIndex, patternIndex) {
+        // split the pattern into head, tail, and middle of ** delimited parts
+        const firstgs = pattern.indexOf(GLOBSTAR, patternIndex);
+        const lastgs = pattern.lastIndexOf(GLOBSTAR);
+        // split the pattern up into globstar-delimited sections
+        // the tail has to be at the end, and the others just have
+        // to be found in order from the head.
+        const [head, body, tail] = partial ?
+            [
+                pattern.slice(patternIndex, firstgs),
+                pattern.slice(firstgs + 1),
+                [],
+            ]
+            : [
+                pattern.slice(patternIndex, firstgs),
+                pattern.slice(firstgs + 1, lastgs),
+                pattern.slice(lastgs + 1),
+            ];
+        // check the head, from the current file/pattern index.
+        if (head.length) {
+            const fileHead = file.slice(fileIndex, fileIndex + head.length);
+            if (!this.#matchOne(fileHead, head, partial, 0, 0)) {
+                return false;
+            }
+            fileIndex += head.length;
+            patternIndex += head.length;
+        }
+        // now we know the head matches!
+        // if the last portion is not empty, it MUST match the end
+        // check the tail
+        let fileTailMatch = 0;
+        if (tail.length) {
+            // if head + tail > file, then we cannot possibly match
+            if (tail.length + fileIndex > file.length)
+                return false;
+            // try to match the tail
+            let tailStart = file.length - tail.length;
+            if (this.#matchOne(file, tail, partial, tailStart, 0)) {
+                fileTailMatch = tail.length;
+            }
+            else {
+                // affordance for stuff like a/**/* matching a/b/
+                // if the last file portion is '', and there's more to the pattern
+                // then try without the '' bit.
+                if (file[file.length - 1] !== '' ||
+                    fileIndex + tail.length === file.length) {
+                    return false;
+                }
+                tailStart--;
+                if (!this.#matchOne(file, tail, partial, tailStart, 0)) {
+                    return false;
+                }
+                fileTailMatch = tail.length + 1;
+            }
+        }
+        // now we know the tail matches!
+        // the middle is zero or more portions wrapped in **, possibly
+        // containing more ** sections.
+        // so a/**/b/**/c/**/d has become **/b/**/c/**
+        // if it's empty, it means a/**/b, just verify we have no bad dots
+        // if there's no tail, so it ends on /**, then we must have *something*
+        // after the head, or it's not a matc
+        if (!body.length) {
+            let sawSome = !!fileTailMatch;
+            for (let i = fileIndex; i < file.length - fileTailMatch; i++) {
+                const f = String(file[i]);
+                sawSome = true;
+                if (f === '.' ||
+                    f === '..' ||
+                    (!this.options.dot && f.startsWith('.'))) {
+                    return false;
+                }
+            }
+            // in partial mode, we just need to get past all file parts
+            return partial || sawSome;
+        }
+        // now we know that there's one or more body sections, which can
+        // be matched anywhere from the 0 index (because the head was pruned)
+        // through to the length-fileTailMatch index.
+        // split the body up into sections, and note the minimum index it can
+        // be found at (start with the length of all previous segments)
+        // [section, before, after]
+        const bodySegments = [[[], 0]];
+        let currentBody = bodySegments[0];
+        let nonGsParts = 0;
+        const nonGsPartsSums = [0];
+        for (const b of body) {
+            if (b === GLOBSTAR) {
+                nonGsPartsSums.push(nonGsParts);
+                currentBody = [[], 0];
+                bodySegments.push(currentBody);
+            }
+            else {
+                currentBody[0].push(b);
+                nonGsParts++;
+            }
+        }
+        let i = bodySegments.length - 1;
+        const fileLength = file.length - fileTailMatch;
+        for (const b of bodySegments) {
+            b[1] = fileLength - (nonGsPartsSums[i--] + b[0].length);
+        }
+        return !!this.#matchGlobStarBodySections(file, bodySegments, fileIndex, 0, partial, 0, !!fileTailMatch);
+    }
+    // return false for "nope, not matching"
+    // return null for "not matching, cannot keep trying"
+    #matchGlobStarBodySections(file, 
+    // pattern section, last possible position for it
+    bodySegments, fileIndex, bodyIndex, partial, globStarDepth, sawTail) {
+        // take the first body segment, and walk from fileIndex to its "after"
+        // value at the end
+        // If it doesn't match at that position, we increment, until we hit
+        // that final possible position, and give up.
+        // If it does match, then advance and try to rest.
+        // If any of them fail we keep walking forward.
+        // this is still a bit recursively painful, but it's more constrained
+        // than previous implementations, because we never test something that
+        // can't possibly be a valid matching condition.
+        const bs = bodySegments[bodyIndex];
+        if (!bs) {
+            // just make sure that there's no bad dots
+            for (let i = fileIndex; i < file.length; i++) {
+                sawTail = true;
+                const f = file[i];
+                if (f === '.' ||
+                    f === '..' ||
+                    (!this.options.dot && f.startsWith('.'))) {
+                    return false;
+                }
+            }
+            return sawTail;
+        }
+        // have a non-globstar body section to test
+        const [body, after] = bs;
+        while (fileIndex <= after) {
+            const m = this.#matchOne(file.slice(0, fileIndex + body.length), body, partial, fileIndex, 0);
+            // if limit exceeded, no match. intentional false negative,
+            // acceptable break in correctness for security.
+            if (m && globStarDepth < this.maxGlobstarRecursion) {
+                // match! see if the rest match. if so, we're done!
+                const sub = this.#matchGlobStarBodySections(file, bodySegments, fileIndex + body.length, bodyIndex + 1, partial, globStarDepth + 1, sawTail);
+                if (sub !== false) {
+                    return sub;
+                }
+            }
+            const f = file[fileIndex];
+            if (f === '.' ||
+                f === '..' ||
+                (!this.options.dot && f.startsWith('.'))) {
+                return false;
+            }
+            fileIndex++;
+        }
+        // walked off. no point continuing
+        return partial || null;
+    }
+    #matchOne(file, pattern, partial, fileIndex, patternIndex) {
+        let fi;
+        let pi;
+        let pl;
+        let fl;
+        for (fi = fileIndex,
+            pi = patternIndex,
+            fl = file.length,
+            pl = pattern.length; fi < fl && pi < pl; fi++, pi++) {
+            this.debug('matchOne loop');
+            let p = pattern[pi];
+            let f = file[fi];
+            this.debug(pattern, p, f);
+            // should be impossible.
+            // some invalid regexp stuff in the set.
+            /* c8 ignore start */
+            if (p === false || p === GLOBSTAR) {
+                return false;
+            }
+            /* c8 ignore stop */
+            // something other than **
+            // non-magic patterns just have to match exactly
+            // patterns with magic have been turned into regexps.
+            let hit;
+            if (typeof p === 'string') {
+                hit = f === p;
+                this.debug('string match', p, f, hit);
+            }
+            else {
+                hit = p.test(f);
+                this.debug('pattern match', p, f, hit);
+            }
+            if (!hit)
+                return false;
+        }
+        // Note: ending in / means that we'll get a final ""
+        // at the end of the pattern.  This can only match a
+        // corresponding "" at the end of the file.
+        // If the file ends in /, then it can only match a
+        // a pattern that ends in /, unless the pattern just
+        // doesn't have any more for it. But, a/b/ should *not*
+        // match "a/b/*", even though "" matches against the
+        // [^/]*? pattern, except in partial mode, where it might
+        // simply not be reached yet.
+        // However, a/b/ should still satisfy a/*
+        // now either we fell off the end of the pattern, or we're done.
+        if (fi === fl && pi === pl) {
+            // ran out of pattern and filename at the same time.
+            // an exact hit!
+            return true;
+        }
+        else if (fi === fl) {
+            // ran out of file, but still had pattern left.
+            // this is ok if we're doing the match as part of
+            // a glob fs traversal.
+            return partial;
+        }
+        else if (pi === pl) {
+            // ran out of pattern, still have file left.
+            // this is only acceptable if we're on the very last
+            // empty segment of a file with a trailing slash.
+            // a/* should match a/b/
+            return fi === fl - 1 && file[fi] === '';
+            /* c8 ignore start */
+        }
+        else {
+            // should be unreachable.
+            throw new Error('wtf?');
+        }
+        /* c8 ignore stop */
+    }
+    braceExpand() {
+        return braceExpand(this.pattern, this.options);
+    }
+    parse(pattern) {
+        assertValidPattern(pattern);
+        const options = this.options;
+        // shortcuts
+        if (pattern === '**')
+            return GLOBSTAR;
+        if (pattern === '')
+            return '';
+        // far and away, the most common glob pattern parts are
+        // *, *.*, and *.<ext>  Add a fast check method for those.
+        let m;
+        let fastTest = null;
+        if ((m = pattern.match(starRE))) {
+            fastTest = options.dot ? starTestDot : starTest;
+        }
+        else if ((m = pattern.match(starDotExtRE))) {
+            fastTest = (options.nocase ?
+                options.dot ?
+                    starDotExtTestNocaseDot
+                    : starDotExtTestNocase
+                : options.dot ? starDotExtTestDot
+                    : starDotExtTest)(m[1]);
+        }
+        else if ((m = pattern.match(qmarksRE))) {
+            fastTest = (options.nocase ?
+                options.dot ?
+                    qmarksTestNocaseDot
+                    : qmarksTestNocase
+                : options.dot ? qmarksTestDot
+                    : qmarksTest)(m);
+        }
+        else if ((m = pattern.match(starDotStarRE))) {
+            fastTest = options.dot ? starDotStarTestDot : starDotStarTest;
+        }
+        else if ((m = pattern.match(dotStarRE))) {
+            fastTest = dotStarTest;
+        }
+        const re = AST.fromGlob(pattern, this.options).toMMPattern();
+        if (fastTest && typeof re === 'object') {
+            // Avoids overriding in frozen environments
+            Reflect.defineProperty(re, 'test', { value: fastTest });
+        }
+        return re;
+    }
+    makeRe() {
+        if (this.regexp || this.regexp === false)
+            return this.regexp;
+        // at this point, this.set is a 2d array of partial
+        // pattern strings, or "**".
+        //
+        // It's better to use .match().  This function shouldn't
+        // be used, really, but it's pretty convenient sometimes,
+        // when you just want to work with a regex.
+        const set = this.set;
+        if (!set.length) {
+            this.regexp = false;
+            return this.regexp;
+        }
+        const options = this.options;
+        const twoStar = options.noglobstar ? star
+            : options.dot ? twoStarDot
+                : twoStarNoDot;
+        const flags = new Set(options.nocase ? ['i'] : []);
+        // regexpify non-globstar patterns
+        // if ** is only item, then we just do one twoStar
+        // if ** is first, and there are more, prepend (\/|twoStar\/)? to next
+        // if ** is last, append (\/twoStar|) to previous
+        // if ** is in the middle, append (\/|\/twoStar\/) to previous
+        // then filter out GLOBSTAR symbols
+        let re = set
+            .map(pattern => {
+            const pp = pattern.map(p => {
+                if (p instanceof RegExp) {
+                    for (const f of p.flags.split(''))
+                        flags.add(f);
+                }
+                return (typeof p === 'string' ? regExpEscape(p)
+                    : p === GLOBSTAR ? GLOBSTAR
+                        : p._src);
+            });
+            pp.forEach((p, i) => {
+                const next = pp[i + 1];
+                const prev = pp[i - 1];
+                if (p !== GLOBSTAR || prev === GLOBSTAR) {
+                    return;
+                }
+                if (prev === undefined) {
+                    if (next !== undefined && next !== GLOBSTAR) {
+                        pp[i + 1] = '(?:\\/|' + twoStar + '\\/)?' + next;
+                    }
+                    else {
+                        pp[i] = twoStar;
+                    }
+                }
+                else if (next === undefined) {
+                    pp[i - 1] = prev + '(?:\\/|\\/' + twoStar + ')?';
+                }
+                else if (next !== GLOBSTAR) {
+                    pp[i - 1] = prev + '(?:\\/|\\/' + twoStar + '\\/)' + next;
+                    pp[i + 1] = GLOBSTAR;
+                }
+            });
+            const filtered = pp.filter(p => p !== GLOBSTAR);
+            // For partial matches, we need to make the pattern match
+            // any prefix of the full path. We do this by generating
+            // alternative patterns that match progressively longer prefixes.
+            if (this.partial && filtered.length >= 1) {
+                const prefixes = [];
+                for (let i = 1; i <= filtered.length; i++) {
+                    prefixes.push(filtered.slice(0, i).join('/'));
+                }
+                return '(?:' + prefixes.join('|') + ')';
+            }
+            return filtered.join('/');
+        })
+            .join('|');
+        // need to wrap in parens if we had more than one thing with |,
+        // otherwise only the first will be anchored to ^ and the last to $
+        const [open, close] = set.length > 1 ? ['(?:', ')'] : ['', ''];
+        // must match entire pattern
+        // ending in a * or ** will make it less strict.
+        re = '^' + open + re + close + '$';
+        // In partial mode, '/' should always match as it's a valid prefix for any pattern
+        if (this.partial) {
+            re = '^(?:\\/|' + open + re.slice(1, -1) + close + ')$';
+        }
+        // can match anything, as long as it's not this.
+        if (this.negate)
+            re = '^(?!' + re + ').+$';
+        try {
+            this.regexp = new RegExp(re, [...flags].join(''));
+            /* c8 ignore start */
+        }
+        catch {
+            // should be impossible
+            this.regexp = false;
+        }
+        /* c8 ignore stop */
+        return this.regexp;
+    }
+    slashSplit(p) {
+        // if p starts with // on windows, we preserve that
+        // so that UNC paths aren't broken.  Otherwise, any number of
+        // / characters are coalesced into one, unless
+        // preserveMultipleSlashes is set to true.
+        if (this.preserveMultipleSlashes) {
+            return p.split('/');
+        }
+        else if (this.isWindows && /^\/\/[^/]+/.test(p)) {
+            // add an extra '' for the one we lose
+            return ['', ...p.split(/\/+/)];
+        }
+        else {
+            return p.split(/\/+/);
+        }
+    }
+    match(f, partial = this.partial) {
+        this.debug('match', f, this.pattern);
+        // short-circuit in the case of busted things.
+        // comments, etc.
+        if (this.comment) {
+            return false;
+        }
+        if (this.empty) {
+            return f === '';
+        }
+        if (f === '/' && partial) {
+            return true;
+        }
+        const options = this.options;
+        // windows: need to use /, not \
+        if (this.isWindows) {
+            f = f.split('\\').join('/');
+        }
+        // treat the test path as a set of pathparts.
+        const ff = this.slashSplit(f);
+        this.debug(this.pattern, 'split', ff);
+        // just ONE of the pattern sets in this.set needs to match
+        // in order for it to be valid.  If negating, then just one
+        // match means that we have failed.
+        // Either way, return on the first hit.
+        const set = this.set;
+        this.debug(this.pattern, 'set', set);
+        // Find the basename of the path by looking for the last non-empty segment
+        let filename = ff[ff.length - 1];
+        if (!filename) {
+            for (let i = ff.length - 2; !filename && i >= 0; i--) {
+                filename = ff[i];
+            }
+        }
+        for (const pattern of set) {
+            let file = ff;
+            if (options.matchBase && pattern.length === 1) {
+                file = [filename];
+            }
+            const hit = this.matchOne(file, pattern, partial);
+            if (hit) {
+                if (options.flipNegate) {
+                    return true;
+                }
+                return !this.negate;
+            }
+        }
+        // didn't get any hits.  this is success if it's a negative
+        // pattern, failure otherwise.
+        if (options.flipNegate) {
+            return false;
+        }
+        return this.negate;
+    }
+    static defaults(def) {
+        return minimatch$1.defaults(def).Minimatch;
+    }
+};
+/* c8 ignore stop */
+minimatch$1.AST = AST;
+minimatch$1.Minimatch = Minimatch$1;
+minimatch$1.escape = escape$1;
+minimatch$1.unescape = unescape;
+
+const IS_WINDOWS$5 = process.platform === 'win32';
+/**
+ * Helper class for parsing paths into segments
+ */
+class Path {
+    /**
+     * Constructs a Path
+     * @param itemPath Path or array of segments
+     */
+    constructor(itemPath) {
+        this.segments = [];
+        // String
+        if (typeof itemPath === 'string') {
+            assert$1(itemPath, `Parameter 'itemPath' must not be empty`);
+            // Normalize slashes and trim unnecessary trailing slash
+            itemPath = safeTrimTrailingSeparator(itemPath);
+            // Not rooted
+            if (!hasRoot(itemPath)) {
+                this.segments = itemPath.split(path$1.sep);
+            }
+            // Rooted
+            else {
+                // Add all segments, while not at the root
+                let remaining = itemPath;
+                let dir = dirname(remaining);
+                while (dir !== remaining) {
+                    // Add the segment
+                    const basename = path$1.basename(remaining);
+                    this.segments.unshift(basename);
+                    // Truncate the last segment
+                    remaining = dir;
+                    dir = dirname(remaining);
+                }
+                // Remainder is the root
+                this.segments.unshift(remaining);
+            }
+        }
+        // Array
+        else {
+            // Must not be empty
+            assert$1(itemPath.length > 0, `Parameter 'itemPath' must not be an empty array`);
+            // Each segment
+            for (let i = 0; i < itemPath.length; i++) {
+                let segment = itemPath[i];
+                // Must not be empty
+                assert$1(segment, `Parameter 'itemPath' must not contain any empty segments`);
+                // Normalize slashes
+                segment = normalizeSeparators(itemPath[i]);
+                // Root segment
+                if (i === 0 && hasRoot(segment)) {
+                    segment = safeTrimTrailingSeparator(segment);
+                    assert$1(segment === dirname(segment), `Parameter 'itemPath' root segment contains information for multiple segments`);
+                    this.segments.push(segment);
+                }
+                // All other segments
+                else {
+                    // Must not contain slash
+                    assert$1(!segment.includes(path$1.sep), `Parameter 'itemPath' contains unexpected path separators`);
+                    this.segments.push(segment);
+                }
+            }
+        }
+    }
+    /**
+     * Converts the path to it's string representation
+     */
+    toString() {
+        // First segment
+        let result = this.segments[0];
+        // All others
+        let skipSlash = result.endsWith(path$1.sep) || (IS_WINDOWS$5 && /^[A-Z]:$/i.test(result));
+        for (let i = 1; i < this.segments.length; i++) {
+            if (skipSlash) {
+                skipSlash = false;
+            }
+            else {
+                result += path$1.sep;
+            }
+            result += this.segments[i];
+        }
+        return result;
+    }
+}
+
+const IS_WINDOWS$4 = process.platform === 'win32';
+class Pattern {
+    constructor(patternOrNegate, isImplicitPattern = false, segments, homedir) {
+        /**
+         * Indicates whether matches should be excluded from the result set
+         */
+        this.negate = false;
+        // Pattern overload
+        let pattern;
+        if (typeof patternOrNegate === 'string') {
+            pattern = patternOrNegate.trim();
+        }
+        // Segments overload
+        else {
+            // Convert to pattern
+            segments = segments || [];
+            assert$1(segments.length, `Parameter 'segments' must not empty`);
+            const root = Pattern.getLiteral(segments[0]);
+            assert$1(root && hasAbsoluteRoot(root), `Parameter 'segments' first element must be a root path`);
+            pattern = new Path(segments).toString().trim();
+            if (patternOrNegate) {
+                pattern = `!${pattern}`;
+            }
+        }
+        // Negate
+        while (pattern.startsWith('!')) {
+            this.negate = !this.negate;
+            pattern = pattern.substr(1).trim();
+        }
+        // Normalize slashes and ensures absolute root
+        pattern = Pattern.fixupPattern(pattern, homedir);
+        // Segments
+        this.segments = new Path(pattern).segments;
+        // Trailing slash indicates the pattern should only match directories, not regular files
+        this.trailingSeparator = normalizeSeparators(pattern)
+            .endsWith(path$1.sep);
+        pattern = safeTrimTrailingSeparator(pattern);
+        // Search path (literal path prior to the first glob segment)
+        let foundGlob = false;
+        const searchSegments = this.segments
+            .map(x => Pattern.getLiteral(x))
+            .filter(x => !foundGlob && !(foundGlob = x === ''));
+        this.searchPath = new Path(searchSegments).toString();
+        // Root RegExp (required when determining partial match)
+        this.rootRegExp = new RegExp(Pattern.regExpEscape(searchSegments[0]), IS_WINDOWS$4 ? 'i' : '');
+        this.isImplicitPattern = isImplicitPattern;
+        // Create minimatch
+        const minimatchOptions = {
+            dot: true,
+            nobrace: true,
+            nocase: IS_WINDOWS$4,
+            nocomment: true,
+            noext: true,
+            nonegate: true
+        };
+        pattern = IS_WINDOWS$4 ? pattern.replace(/\\/g, '/') : pattern;
+        this.minimatch = new Minimatch$1(pattern, minimatchOptions);
+    }
+    /**
+     * Matches the pattern against the specified path
+     */
+    match(itemPath) {
+        // Last segment is globstar?
+        if (this.segments[this.segments.length - 1] === '**') {
+            // Normalize slashes
+            itemPath = normalizeSeparators(itemPath);
+            // Append a trailing slash. Otherwise Minimatch will not match the directory immediately
+            // preceding the globstar. For example, given the pattern `/foo/**`, Minimatch returns
+            // false for `/foo` but returns true for `/foo/`. Append a trailing slash to handle that quirk.
+            if (!itemPath.endsWith(path$1.sep) && this.isImplicitPattern === false) {
+                // Note, this is safe because the constructor ensures the pattern has an absolute root.
+                // For example, formats like C: and C:foo on Windows are resolved to an absolute root.
+                itemPath = `${itemPath}${path$1.sep}`;
+            }
+        }
+        else {
+            // Normalize slashes and trim unnecessary trailing slash
+            itemPath = safeTrimTrailingSeparator(itemPath);
+        }
+        // Match
+        if (this.minimatch.match(itemPath)) {
+            return this.trailingSeparator ? MatchKind$1.Directory : MatchKind$1.All;
+        }
+        return MatchKind$1.None;
+    }
+    /**
+     * Indicates whether the pattern may match descendants of the specified path
+     */
+    partialMatch(itemPath) {
+        // Normalize slashes and trim unnecessary trailing slash
+        itemPath = safeTrimTrailingSeparator(itemPath);
+        // matchOne does not handle root path correctly
+        if (dirname(itemPath) === itemPath) {
+            return this.rootRegExp.test(itemPath);
+        }
+        return this.minimatch.matchOne(itemPath.split(IS_WINDOWS$4 ? /\\+/ : /\/+/), this.minimatch.set[0], true);
+    }
+    /**
+     * Escapes glob patterns within a path
+     */
+    static globEscape(s) {
+        return (IS_WINDOWS$4 ? s : s.replace(/\\/g, '\\\\')) // escape '\' on Linux/macOS
+            .replace(/(\[)(?=[^/]+\])/g, '[[]') // escape '[' when ']' follows within the path segment
+            .replace(/\?/g, '[?]') // escape '?'
+            .replace(/\*/g, '[*]'); // escape '*'
+    }
+    /**
+     * Normalizes slashes and ensures absolute root
+     */
+    static fixupPattern(pattern, homedir) {
+        // Empty
+        assert$1(pattern, 'pattern cannot be empty');
+        // Must not contain `.` segment, unless first segment
+        // Must not contain `..` segment
+        const literalSegments = new Path(pattern).segments.map(x => Pattern.getLiteral(x));
+        assert$1(literalSegments.every((x, i) => (x !== '.' || i === 0) && x !== '..'), `Invalid pattern '${pattern}'. Relative pathing '.' and '..' is not allowed.`);
+        // Must not contain globs in root, e.g. Windows UNC path \\foo\b*r
+        assert$1(!hasRoot(pattern) || literalSegments[0], `Invalid pattern '${pattern}'. Root segment must not contain globs.`);
+        // Normalize slashes
+        pattern = normalizeSeparators(pattern);
+        // Replace leading `.` segment
+        if (pattern === '.' || pattern.startsWith(`.${path$1.sep}`)) {
+            pattern = Pattern.globEscape(process.cwd()) + pattern.substr(1);
+        }
+        // Replace leading `~` segment
+        else if (pattern === '~' || pattern.startsWith(`~${path$1.sep}`)) {
+            homedir = homedir || os.homedir();
+            assert$1(homedir, 'Unable to determine HOME directory');
+            assert$1(hasAbsoluteRoot(homedir), `Expected HOME directory to be a rooted path. Actual '${homedir}'`);
+            pattern = Pattern.globEscape(homedir) + pattern.substr(1);
+        }
+        // Replace relative drive root, e.g. pattern is C: or C:foo
+        else if (IS_WINDOWS$4 &&
+            (pattern.match(/^[A-Z]:$/i) || pattern.match(/^[A-Z]:[^\\]/i))) {
+            let root = ensureAbsoluteRoot('C:\\dummy-root', pattern.substr(0, 2));
+            if (pattern.length > 2 && !root.endsWith('\\')) {
+                root += '\\';
+            }
+            pattern = Pattern.globEscape(root) + pattern.substr(2);
+        }
+        // Replace relative root, e.g. pattern is \ or \foo
+        else if (IS_WINDOWS$4 && (pattern === '\\' || pattern.match(/^\\[^\\]/))) {
+            let root = ensureAbsoluteRoot('C:\\dummy-root', '\\');
+            if (!root.endsWith('\\')) {
+                root += '\\';
+            }
+            pattern = Pattern.globEscape(root) + pattern.substr(1);
+        }
+        // Otherwise ensure absolute root
+        else {
+            pattern = ensureAbsoluteRoot(Pattern.globEscape(process.cwd()), pattern);
+        }
+        return normalizeSeparators(pattern);
+    }
+    /**
+     * Attempts to unescape a pattern segment to create a literal path segment.
+     * Otherwise returns empty string.
+     */
+    static getLiteral(segment) {
+        let literal = '';
+        for (let i = 0; i < segment.length; i++) {
+            const c = segment[i];
+            // Escape
+            if (c === '\\' && !IS_WINDOWS$4 && i + 1 < segment.length) {
+                literal += segment[++i];
+                continue;
+            }
+            // Wildcard
+            else if (c === '*' || c === '?') {
+                return '';
+            }
+            // Character set
+            else if (c === '[' && i + 1 < segment.length) {
+                let set = '';
+                let closed = -1;
+                for (let i2 = i + 1; i2 < segment.length; i2++) {
+                    const c2 = segment[i2];
+                    // Escape
+                    if (c2 === '\\' && !IS_WINDOWS$4 && i2 + 1 < segment.length) {
+                        set += segment[++i2];
+                        continue;
+                    }
+                    // Closed
+                    else if (c2 === ']') {
+                        closed = i2;
+                        break;
+                    }
+                    // Otherwise
+                    else {
+                        set += c2;
+                    }
+                }
+                // Closed?
+                if (closed >= 0) {
+                    // Cannot convert
+                    if (set.length > 1) {
+                        return '';
+                    }
+                    // Convert to literal
+                    if (set) {
+                        literal += set;
+                        i = closed;
+                        continue;
+                    }
+                }
+                // Otherwise fall thru
+            }
+            // Append
+            literal += c;
+        }
+        return literal;
+    }
+    /**
+     * Escapes regexp special characters
+     * https://javascript.info/regexp-escaping
+     */
+    static regExpEscape(s) {
+        return s.replace(/[[\\^$.|?*+()]/g, '\\$&');
+    }
+}
+
+class SearchState {
+    constructor(path, level) {
+        this.path = path;
+        this.level = level;
+    }
+}
+
+var __awaiter$b = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __asyncValues$1 = (undefined && undefined.__asyncValues) || function (o) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var m = o[Symbol.asyncIterator], i;
+    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+};
+var __await$1 = (undefined && undefined.__await) || function (v) { return this instanceof __await$1 ? (this.v = v, this) : new __await$1(v); };
+var __asyncGenerator = (undefined && undefined.__asyncGenerator) || function (thisArg, _arguments, generator) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var g = generator.apply(thisArg, _arguments || []), i, q = [];
+    return i = Object.create((typeof AsyncIterator === "function" ? AsyncIterator : Object).prototype), verb("next"), verb("throw"), verb("return", awaitReturn), i[Symbol.asyncIterator] = function () { return this; }, i;
+    function awaitReturn(f) { return function (v) { return Promise.resolve(v).then(f, reject); }; }
+    function verb(n, f) { if (g[n]) { i[n] = function (v) { return new Promise(function (a, b) { q.push([n, v, a, b]) > 1 || resume(n, v); }); }; if (f) i[n] = f(i[n]); } }
+    function resume(n, v) { try { step(g[n](v)); } catch (e) { settle(q[0][3], e); } }
+    function step(r) { r.value instanceof __await$1 ? Promise.resolve(r.value.v).then(fulfill, reject) : settle(q[0][2], r); }
+    function fulfill(value) { resume("next", value); }
+    function reject(value) { resume("throw", value); }
+    function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
+};
+const IS_WINDOWS$3 = process.platform === 'win32';
+class DefaultGlobber {
+    constructor(options) {
+        this.patterns = [];
+        this.searchPaths = [];
+        this.options = getOptions(options);
+    }
+    getSearchPaths() {
+        // Return a copy
+        return this.searchPaths.slice();
+    }
+    glob() {
+        return __awaiter$b(this, void 0, void 0, function* () {
+            var _a, e_1, _b, _c;
+            const result = [];
+            try {
+                for (var _d = true, _e = __asyncValues$1(this.globGenerator()), _f; _f = yield _e.next(), _a = _f.done, !_a; _d = true) {
+                    _c = _f.value;
+                    _d = false;
+                    const itemPath = _c;
+                    result.push(itemPath);
+                }
+            }
+            catch (e_1_1) { e_1 = { error: e_1_1 }; }
+            finally {
+                try {
+                    if (!_d && !_a && (_b = _e.return)) yield _b.call(_e);
+                }
+                finally { if (e_1) throw e_1.error; }
+            }
+            return result;
+        });
+    }
+    globGenerator() {
+        return __asyncGenerator(this, arguments, function* globGenerator_1() {
+            // Fill in defaults options
+            const options = getOptions(this.options);
+            // Implicit descendants?
+            const patterns = [];
+            for (const pattern of this.patterns) {
+                patterns.push(pattern);
+                if (options.implicitDescendants &&
+                    (pattern.trailingSeparator ||
+                        pattern.segments[pattern.segments.length - 1] !== '**')) {
+                    patterns.push(new Pattern(pattern.negate, true, pattern.segments.concat('**')));
+                }
+            }
+            // Push the search paths
+            const stack = [];
+            for (const searchPath of getSearchPaths(patterns)) {
+                debug(`Search path '${searchPath}'`);
+                // Exists?
+                try {
+                    // Intentionally using lstat. Detection for broken symlink
+                    // will be performed later (if following symlinks).
+                    yield __await$1(fs.promises.lstat(searchPath));
+                }
+                catch (err) {
+                    if (err.code === 'ENOENT') {
+                        continue;
+                    }
+                    throw err;
+                }
+                stack.unshift(new SearchState(searchPath, 1));
+            }
+            // Search
+            const traversalChain = []; // used to detect cycles
+            while (stack.length) {
+                // Pop
+                const item = stack.pop();
+                // Match?
+                const match = match$1(patterns, item.path);
+                const partialMatch$1 = !!match || partialMatch(patterns, item.path);
+                if (!match && !partialMatch$1) {
+                    continue;
+                }
+                // Stat
+                const stats = yield __await$1(DefaultGlobber.stat(item, options, traversalChain)
+                // Broken symlink, or symlink cycle detected, or no longer exists
+                );
+                // Broken symlink, or symlink cycle detected, or no longer exists
+                if (!stats) {
+                    continue;
+                }
+                // Hidden file or directory?
+                if (options.excludeHiddenFiles && path$1.basename(item.path).match(/^\./)) {
+                    continue;
+                }
+                // Directory
+                if (stats.isDirectory()) {
+                    // Matched
+                    if (match & MatchKind$1.Directory && options.matchDirectories) {
+                        yield yield __await$1(item.path);
+                    }
+                    // Descend?
+                    else if (!partialMatch$1) {
+                        continue;
+                    }
+                    // Push the child items in reverse
+                    const childLevel = item.level + 1;
+                    const childItems = (yield __await$1(fs.promises.readdir(item.path))).map(x => new SearchState(path$1.join(item.path, x), childLevel));
+                    stack.push(...childItems.reverse());
+                }
+                // File
+                else if (match & MatchKind$1.File) {
+                    yield yield __await$1(item.path);
+                }
+            }
+        });
+    }
+    /**
+     * Constructs a DefaultGlobber
+     */
+    static create(patterns, options) {
+        return __awaiter$b(this, void 0, void 0, function* () {
+            const result = new DefaultGlobber(options);
+            if (IS_WINDOWS$3) {
+                patterns = patterns.replace(/\r\n/g, '\n');
+                patterns = patterns.replace(/\r/g, '\n');
+            }
+            const lines = patterns.split('\n').map(x => x.trim());
+            for (const line of lines) {
+                // Empty or comment
+                if (!line || line.startsWith('#')) {
+                    continue;
+                }
+                // Pattern
+                else {
+                    result.patterns.push(new Pattern(line));
+                }
+            }
+            result.searchPaths.push(...getSearchPaths(result.patterns));
+            return result;
+        });
+    }
+    static stat(item, options, traversalChain) {
+        return __awaiter$b(this, void 0, void 0, function* () {
+            // Note:
+            // `stat` returns info about the target of a symlink (or symlink chain)
+            // `lstat` returns info about a symlink itself
+            let stats;
+            if (options.followSymbolicLinks) {
+                try {
+                    // Use `stat` (following symlinks)
+                    stats = yield fs.promises.stat(item.path);
+                }
+                catch (err) {
+                    if (err.code === 'ENOENT') {
+                        if (options.omitBrokenSymbolicLinks) {
+                            debug(`Broken symlink '${item.path}'`);
+                            return undefined;
+                        }
+                        throw new Error(`No information found for the path '${item.path}'. This may indicate a broken symbolic link.`);
+                    }
+                    throw err;
+                }
+            }
+            else {
+                // Use `lstat` (not following symlinks)
+                stats = yield fs.promises.lstat(item.path);
+            }
+            // Note, isDirectory() returns false for the lstat of a symlink
+            if (stats.isDirectory() && options.followSymbolicLinks) {
+                // Get the realpath
+                const realPath = yield fs.promises.realpath(item.path);
+                // Fixup the traversal chain to match the item level
+                while (traversalChain.length >= item.level) {
+                    traversalChain.pop();
+                }
+                // Test for a cycle
+                if (traversalChain.some((x) => x === realPath)) {
+                    debug(`Symlink cycle detected for path '${item.path}' and realpath '${realPath}'`);
+                    return undefined;
+                }
+                // Update the traversal chain
+                traversalChain.push(realPath);
+            }
+            return stats;
+        });
+    }
+}
+
+var __awaiter$a = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __asyncValues = (undefined && undefined.__asyncValues) || function (o) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var m = o[Symbol.asyncIterator], i;
+    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+};
+function hashFiles$1(globber_1, currentWorkspace_1) {
+    return __awaiter$a(this, arguments, void 0, function* (globber, currentWorkspace, verbose = false) {
+        var _a, e_1, _b, _c;
+        var _d;
+        const writeDelegate = verbose ? info : debug;
+        let hasMatch = false;
+        const githubWorkspace = currentWorkspace
+            ? currentWorkspace
+            : ((_d = process.env['GITHUB_WORKSPACE']) !== null && _d !== void 0 ? _d : process.cwd());
+        const result = crypto$1.createHash('sha256');
+        let count = 0;
+        try {
+            for (var _e = true, _f = __asyncValues(globber.globGenerator()), _g; _g = yield _f.next(), _a = _g.done, !_a; _e = true) {
+                _c = _g.value;
+                _e = false;
+                const file = _c;
+                writeDelegate(file);
+                if (!file.startsWith(`${githubWorkspace}${path$1.sep}`)) {
+                    writeDelegate(`Ignore '${file}' since it is not under GITHUB_WORKSPACE.`);
+                    continue;
+                }
+                if (fs.statSync(file).isDirectory()) {
+                    writeDelegate(`Skip directory '${file}'.`);
+                    continue;
+                }
+                const hash = crypto$1.createHash('sha256');
+                const pipeline = util$8.promisify(stream.pipeline);
+                yield pipeline(fs.createReadStream(file), hash);
+                result.write(hash.digest());
+                count++;
+                if (!hasMatch) {
+                    hasMatch = true;
+                }
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (!_e && !_a && (_b = _f.return)) yield _b.call(_f);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+        result.end();
+        if (hasMatch) {
+            writeDelegate(`Found ${count} files to hash.`);
+            return result.digest('hex');
+        }
+        else {
+            writeDelegate(`No matches found for glob`);
+            return '';
+        }
+    });
+}
+
+var __awaiter$9 = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+/**
+ * Constructs a globber
+ *
+ * @param patterns  Patterns separated by newlines
+ * @param options   Glob options
+ */
+function create(patterns, options) {
+    return __awaiter$9(this, void 0, void 0, function* () {
+        return yield DefaultGlobber.create(patterns, options);
+    });
+}
+/**
+ * Computes the sha256 hash of a glob
+ *
+ * @param patterns  Patterns separated by newlines
+ * @param currentWorkspace  Workspace used when matching files
+ * @param options   Glob options
+ * @param verbose   Enables verbose logging
+ */
+function hashFiles(patterns_1) {
+    return __awaiter$9(this, arguments, void 0, function* (patterns, currentWorkspace = '', options, verbose = false) {
+        let followSymbolicLinks = true;
+        if (options && typeof options.followSymbolicLinks === 'boolean') {
+            followSymbolicLinks = options.followSymbolicLinks;
+        }
+        const globber = yield create(patterns, { followSymbolicLinks });
+        return hashFiles$1(globber, currentWorkspace, verbose);
+    });
+}
+
+process.platform === 'win32';
+
+/**
+ * Indicates whether a pattern matches a path
+ */
+var MatchKind;
+(function (MatchKind) {
+    /** Not matched */
+    MatchKind[MatchKind["None"] = 0] = "None";
+    /** Matched if the path is a directory */
+    MatchKind[MatchKind["Directory"] = 1] = "Directory";
+    /** Matched if the path is a regular file */
+    MatchKind[MatchKind["File"] = 2] = "File";
+    /** Matched */
+    MatchKind[MatchKind["All"] = 3] = "All";
+})(MatchKind || (MatchKind = {}));
+
+process.platform === 'win32';
 
 var concatMap;
 var hasRequiredConcatMap;
@@ -30344,9 +33705,12 @@ function requireBraceExpansion () {
 	  return parts;
 	}
 
-	function expandTop(str) {
+	function expandTop(str, options) {
 	  if (!str)
 	    return [];
+
+	  options = options || {};
+	  var max = options.max == null ? Infinity : options.max;
 
 	  // I don't know why Bash 4.3 does this, but it does.
 	  // Anything starting with {} will have the first two bytes preserved
@@ -30358,7 +33722,7 @@ function requireBraceExpansion () {
 	    str = '\\{\\}' + str.substr(2);
 	  }
 
-	  return expand(escapeBraces(str), true).map(unescapeBraces);
+	  return expand(escapeBraces(str), max, true).map(unescapeBraces);
 	}
 
 	function embrace(str) {
@@ -30375,7 +33739,7 @@ function requireBraceExpansion () {
 	  return i >= y;
 	}
 
-	function expand(str, isTop) {
+	function expand(str, max, isTop) {
 	  var expansions = [];
 
 	  var m = balanced('{', '}', str);
@@ -30389,7 +33753,7 @@ function requireBraceExpansion () {
 	    // {a},b}
 	    if (m.post.match(/,(?!,).*\}/)) {
 	      str = m.pre + '{' + m.body + escClose + m.post;
-	      return expand(str);
+	      return expand(str, max, true);
 	    }
 	    return [str];
 	  }
@@ -30401,10 +33765,10 @@ function requireBraceExpansion () {
 	    n = parseCommaParts(m.body);
 	    if (n.length === 1) {
 	      // x{{a,b}}y ==> x{a}y x{b}y
-	      n = expand(n[0], false).map(embrace);
+	      n = expand(n[0], max, false).map(embrace);
 	      if (n.length === 1) {
 	        var post = m.post.length
-	          ? expand(m.post, false)
+	          ? expand(m.post, max, false)
 	          : [''];
 	        return post.map(function(p) {
 	          return m.pre + n[0] + p;
@@ -30419,7 +33783,7 @@ function requireBraceExpansion () {
 	  // no need to expand pre, since it is guaranteed to be free of brace-sets
 	  var pre = m.pre;
 	  var post = m.post.length
-	    ? expand(m.post, false)
+	    ? expand(m.post, max, false)
 	    : [''];
 
 	  var N;
@@ -30429,7 +33793,7 @@ function requireBraceExpansion () {
 	    var y = numeric(n[1]);
 	    var width = Math.max(n[0].length, n[1].length);
 	    var incr = n.length == 3
-	      ? Math.abs(numeric(n[2]))
+	      ? Math.max(Math.abs(numeric(n[2])), 1)
 	      : 1;
 	    var test = lte;
 	    var reverse = y < x;
@@ -30441,7 +33805,7 @@ function requireBraceExpansion () {
 
 	    N = [];
 
-	    for (var i = x; test(i, y); i += incr) {
+	    for (var i = x; test(i, y) && N.length < max; i += incr) {
 	      var c;
 	      if (isAlphaSequence) {
 	        c = String.fromCharCode(i);
@@ -30463,11 +33827,11 @@ function requireBraceExpansion () {
 	      N.push(c);
 	    }
 	  } else {
-	    N = concatMap(n, function(el) { return expand(el, false) });
+	    N = concatMap(n, function(el) { return expand(el, max, false) });
 	  }
 
 	  for (var j = 0; j < N.length; j++) {
-	    for (var k = 0; k < post.length; k++) {
+	    for (var k = 0; k < post.length && expansions.length < max; k++) {
 	      var expansion = pre + N[j] + post[k];
 	      if (!isTop || isSequence || expansion)
 	        expansions.push(expansion);
@@ -31496,320 +34860,12 @@ function requireMinimatch () {
 var minimatchExports = requireMinimatch();
 var minimatch = /*@__PURE__*/getDefaultExportFromCjs(minimatchExports);
 
-const IS_WINDOWS$5 = process.platform === 'win32';
-/**
- * Helper class for parsing paths into segments
- */
-class Path {
-    /**
-     * Constructs a Path
-     * @param itemPath Path or array of segments
-     */
-    constructor(itemPath) {
-        this.segments = [];
-        // String
-        if (typeof itemPath === 'string') {
-            assert$1(itemPath, `Parameter 'itemPath' must not be empty`);
-            // Normalize slashes and trim unnecessary trailing slash
-            itemPath = safeTrimTrailingSeparator(itemPath);
-            // Not rooted
-            if (!hasRoot(itemPath)) {
-                this.segments = itemPath.split(path.sep);
-            }
-            // Rooted
-            else {
-                // Add all segments, while not at the root
-                let remaining = itemPath;
-                let dir = dirname(remaining);
-                while (dir !== remaining) {
-                    // Add the segment
-                    const basename = path.basename(remaining);
-                    this.segments.unshift(basename);
-                    // Truncate the last segment
-                    remaining = dir;
-                    dir = dirname(remaining);
-                }
-                // Remainder is the root
-                this.segments.unshift(remaining);
-            }
-        }
-        // Array
-        else {
-            // Must not be empty
-            assert$1(itemPath.length > 0, `Parameter 'itemPath' must not be an empty array`);
-            // Each segment
-            for (let i = 0; i < itemPath.length; i++) {
-                let segment = itemPath[i];
-                // Must not be empty
-                assert$1(segment, `Parameter 'itemPath' must not contain any empty segments`);
-                // Normalize slashes
-                segment = normalizeSeparators(itemPath[i]);
-                // Root segment
-                if (i === 0 && hasRoot(segment)) {
-                    segment = safeTrimTrailingSeparator(segment);
-                    assert$1(segment === dirname(segment), `Parameter 'itemPath' root segment contains information for multiple segments`);
-                    this.segments.push(segment);
-                }
-                // All other segments
-                else {
-                    // Must not contain slash
-                    assert$1(!segment.includes(path.sep), `Parameter 'itemPath' contains unexpected path separators`);
-                    this.segments.push(segment);
-                }
-            }
-        }
-    }
-    /**
-     * Converts the path to it's string representation
-     */
-    toString() {
-        // First segment
-        let result = this.segments[0];
-        // All others
-        let skipSlash = result.endsWith(path.sep) || (IS_WINDOWS$5 && /^[A-Z]:$/i.test(result));
-        for (let i = 1; i < this.segments.length; i++) {
-            if (skipSlash) {
-                skipSlash = false;
-            }
-            else {
-                result += path.sep;
-            }
-            result += this.segments[i];
-        }
-        return result;
-    }
-}
+process.platform === 'win32';
 
 const { Minimatch } = minimatch;
-const IS_WINDOWS$4 = process.platform === 'win32';
-class Pattern {
-    constructor(patternOrNegate, isImplicitPattern = false, segments, homedir) {
-        /**
-         * Indicates whether matches should be excluded from the result set
-         */
-        this.negate = false;
-        // Pattern overload
-        let pattern;
-        if (typeof patternOrNegate === 'string') {
-            pattern = patternOrNegate.trim();
-        }
-        // Segments overload
-        else {
-            // Convert to pattern
-            segments = segments || [];
-            assert$1(segments.length, `Parameter 'segments' must not empty`);
-            const root = Pattern.getLiteral(segments[0]);
-            assert$1(root && hasAbsoluteRoot(root), `Parameter 'segments' first element must be a root path`);
-            pattern = new Path(segments).toString().trim();
-            if (patternOrNegate) {
-                pattern = `!${pattern}`;
-            }
-        }
-        // Negate
-        while (pattern.startsWith('!')) {
-            this.negate = !this.negate;
-            pattern = pattern.substr(1).trim();
-        }
-        // Normalize slashes and ensures absolute root
-        pattern = Pattern.fixupPattern(pattern, homedir);
-        // Segments
-        this.segments = new Path(pattern).segments;
-        // Trailing slash indicates the pattern should only match directories, not regular files
-        this.trailingSeparator = normalizeSeparators(pattern)
-            .endsWith(path.sep);
-        pattern = safeTrimTrailingSeparator(pattern);
-        // Search path (literal path prior to the first glob segment)
-        let foundGlob = false;
-        const searchSegments = this.segments
-            .map(x => Pattern.getLiteral(x))
-            .filter(x => !foundGlob && !(foundGlob = x === ''));
-        this.searchPath = new Path(searchSegments).toString();
-        // Root RegExp (required when determining partial match)
-        this.rootRegExp = new RegExp(Pattern.regExpEscape(searchSegments[0]), IS_WINDOWS$4 ? 'i' : '');
-        this.isImplicitPattern = isImplicitPattern;
-        // Create minimatch
-        const minimatchOptions = {
-            dot: true,
-            nobrace: true,
-            nocase: IS_WINDOWS$4,
-            nocomment: true,
-            noext: true,
-            nonegate: true
-        };
-        pattern = IS_WINDOWS$4 ? pattern.replace(/\\/g, '/') : pattern;
-        this.minimatch = new Minimatch(pattern, minimatchOptions);
-    }
-    /**
-     * Matches the pattern against the specified path
-     */
-    match(itemPath) {
-        // Last segment is globstar?
-        if (this.segments[this.segments.length - 1] === '**') {
-            // Normalize slashes
-            itemPath = normalizeSeparators(itemPath);
-            // Append a trailing slash. Otherwise Minimatch will not match the directory immediately
-            // preceding the globstar. For example, given the pattern `/foo/**`, Minimatch returns
-            // false for `/foo` but returns true for `/foo/`. Append a trailing slash to handle that quirk.
-            if (!itemPath.endsWith(path.sep) && this.isImplicitPattern === false) {
-                // Note, this is safe because the constructor ensures the pattern has an absolute root.
-                // For example, formats like C: and C:foo on Windows are resolved to an absolute root.
-                itemPath = `${itemPath}${path.sep}`;
-            }
-        }
-        else {
-            // Normalize slashes and trim unnecessary trailing slash
-            itemPath = safeTrimTrailingSeparator(itemPath);
-        }
-        // Match
-        if (this.minimatch.match(itemPath)) {
-            return this.trailingSeparator ? MatchKind.Directory : MatchKind.All;
-        }
-        return MatchKind.None;
-    }
-    /**
-     * Indicates whether the pattern may match descendants of the specified path
-     */
-    partialMatch(itemPath) {
-        // Normalize slashes and trim unnecessary trailing slash
-        itemPath = safeTrimTrailingSeparator(itemPath);
-        // matchOne does not handle root path correctly
-        if (dirname(itemPath) === itemPath) {
-            return this.rootRegExp.test(itemPath);
-        }
-        return this.minimatch.matchOne(itemPath.split(IS_WINDOWS$4 ? /\\+/ : /\/+/), this.minimatch.set[0], true);
-    }
-    /**
-     * Escapes glob patterns within a path
-     */
-    static globEscape(s) {
-        return (IS_WINDOWS$4 ? s : s.replace(/\\/g, '\\\\')) // escape '\' on Linux/macOS
-            .replace(/(\[)(?=[^/]+\])/g, '[[]') // escape '[' when ']' follows within the path segment
-            .replace(/\?/g, '[?]') // escape '?'
-            .replace(/\*/g, '[*]'); // escape '*'
-    }
-    /**
-     * Normalizes slashes and ensures absolute root
-     */
-    static fixupPattern(pattern, homedir) {
-        // Empty
-        assert$1(pattern, 'pattern cannot be empty');
-        // Must not contain `.` segment, unless first segment
-        // Must not contain `..` segment
-        const literalSegments = new Path(pattern).segments.map(x => Pattern.getLiteral(x));
-        assert$1(literalSegments.every((x, i) => (x !== '.' || i === 0) && x !== '..'), `Invalid pattern '${pattern}'. Relative pathing '.' and '..' is not allowed.`);
-        // Must not contain globs in root, e.g. Windows UNC path \\foo\b*r
-        assert$1(!hasRoot(pattern) || literalSegments[0], `Invalid pattern '${pattern}'. Root segment must not contain globs.`);
-        // Normalize slashes
-        pattern = normalizeSeparators(pattern);
-        // Replace leading `.` segment
-        if (pattern === '.' || pattern.startsWith(`.${path.sep}`)) {
-            pattern = Pattern.globEscape(process.cwd()) + pattern.substr(1);
-        }
-        // Replace leading `~` segment
-        else if (pattern === '~' || pattern.startsWith(`~${path.sep}`)) {
-            homedir = homedir || os.homedir();
-            assert$1(homedir, 'Unable to determine HOME directory');
-            assert$1(hasAbsoluteRoot(homedir), `Expected HOME directory to be a rooted path. Actual '${homedir}'`);
-            pattern = Pattern.globEscape(homedir) + pattern.substr(1);
-        }
-        // Replace relative drive root, e.g. pattern is C: or C:foo
-        else if (IS_WINDOWS$4 &&
-            (pattern.match(/^[A-Z]:$/i) || pattern.match(/^[A-Z]:[^\\]/i))) {
-            let root = ensureAbsoluteRoot('C:\\dummy-root', pattern.substr(0, 2));
-            if (pattern.length > 2 && !root.endsWith('\\')) {
-                root += '\\';
-            }
-            pattern = Pattern.globEscape(root) + pattern.substr(2);
-        }
-        // Replace relative root, e.g. pattern is \ or \foo
-        else if (IS_WINDOWS$4 && (pattern === '\\' || pattern.match(/^\\[^\\]/))) {
-            let root = ensureAbsoluteRoot('C:\\dummy-root', '\\');
-            if (!root.endsWith('\\')) {
-                root += '\\';
-            }
-            pattern = Pattern.globEscape(root) + pattern.substr(1);
-        }
-        // Otherwise ensure absolute root
-        else {
-            pattern = ensureAbsoluteRoot(Pattern.globEscape(process.cwd()), pattern);
-        }
-        return normalizeSeparators(pattern);
-    }
-    /**
-     * Attempts to unescape a pattern segment to create a literal path segment.
-     * Otherwise returns empty string.
-     */
-    static getLiteral(segment) {
-        let literal = '';
-        for (let i = 0; i < segment.length; i++) {
-            const c = segment[i];
-            // Escape
-            if (c === '\\' && !IS_WINDOWS$4 && i + 1 < segment.length) {
-                literal += segment[++i];
-                continue;
-            }
-            // Wildcard
-            else if (c === '*' || c === '?') {
-                return '';
-            }
-            // Character set
-            else if (c === '[' && i + 1 < segment.length) {
-                let set = '';
-                let closed = -1;
-                for (let i2 = i + 1; i2 < segment.length; i2++) {
-                    const c2 = segment[i2];
-                    // Escape
-                    if (c2 === '\\' && !IS_WINDOWS$4 && i2 + 1 < segment.length) {
-                        set += segment[++i2];
-                        continue;
-                    }
-                    // Closed
-                    else if (c2 === ']') {
-                        closed = i2;
-                        break;
-                    }
-                    // Otherwise
-                    else {
-                        set += c2;
-                    }
-                }
-                // Closed?
-                if (closed >= 0) {
-                    // Cannot convert
-                    if (set.length > 1) {
-                        return '';
-                    }
-                    // Convert to literal
-                    if (set) {
-                        literal += set;
-                        i = closed;
-                        continue;
-                    }
-                }
-                // Otherwise fall thru
-            }
-            // Append
-            literal += c;
-        }
-        return literal;
-    }
-    /**
-     * Escapes regexp special characters
-     * https://javascript.info/regexp-escaping
-     */
-    static regExpEscape(s) {
-        return s.replace(/[[\\^$.|?*+()]/g, '\\$&');
-    }
-}
+process.platform === 'win32';
 
-class SearchState {
-    constructor(path, level) {
-        this.path = path;
-        this.level = level;
-    }
-}
-
-var __awaiter$b = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+(undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
@@ -31818,7 +34874,7 @@ var __awaiter$b = (undefined && undefined.__awaiter) || function (thisArg, _argu
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __asyncValues$1 = (undefined && undefined.__asyncValues) || function (o) {
+(undefined && undefined.__asyncValues) || function (o) {
     if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
     var m = o[Symbol.asyncIterator], i;
     return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
@@ -31826,7 +34882,7 @@ var __asyncValues$1 = (undefined && undefined.__asyncValues) || function (o) {
     function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
 };
 var __await = (undefined && undefined.__await) || function (v) { return this instanceof __await ? (this.v = v, this) : new __await(v); };
-var __asyncGenerator = (undefined && undefined.__asyncGenerator) || function (thisArg, _arguments, generator) {
+(undefined && undefined.__asyncGenerator) || function (thisArg, _arguments, generator) {
     if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
     var g = generator.apply(thisArg, _arguments || []), i, q = [];
     return i = Object.create((typeof AsyncIterator === "function" ? AsyncIterator : Object).prototype), verb("next"), verb("throw"), verb("return", awaitReturn), i[Symbol.asyncIterator] = function () { return this; }, i;
@@ -31838,189 +34894,9 @@ var __asyncGenerator = (undefined && undefined.__asyncGenerator) || function (th
     function reject(value) { resume("throw", value); }
     function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
 };
-const IS_WINDOWS$3 = process.platform === 'win32';
-class DefaultGlobber {
-    constructor(options) {
-        this.patterns = [];
-        this.searchPaths = [];
-        this.options = getOptions(options);
-    }
-    getSearchPaths() {
-        // Return a copy
-        return this.searchPaths.slice();
-    }
-    glob() {
-        return __awaiter$b(this, void 0, void 0, function* () {
-            var _a, e_1, _b, _c;
-            const result = [];
-            try {
-                for (var _d = true, _e = __asyncValues$1(this.globGenerator()), _f; _f = yield _e.next(), _a = _f.done, !_a; _d = true) {
-                    _c = _f.value;
-                    _d = false;
-                    const itemPath = _c;
-                    result.push(itemPath);
-                }
-            }
-            catch (e_1_1) { e_1 = { error: e_1_1 }; }
-            finally {
-                try {
-                    if (!_d && !_a && (_b = _e.return)) yield _b.call(_e);
-                }
-                finally { if (e_1) throw e_1.error; }
-            }
-            return result;
-        });
-    }
-    globGenerator() {
-        return __asyncGenerator(this, arguments, function* globGenerator_1() {
-            // Fill in defaults options
-            const options = getOptions(this.options);
-            // Implicit descendants?
-            const patterns = [];
-            for (const pattern of this.patterns) {
-                patterns.push(pattern);
-                if (options.implicitDescendants &&
-                    (pattern.trailingSeparator ||
-                        pattern.segments[pattern.segments.length - 1] !== '**')) {
-                    patterns.push(new Pattern(pattern.negate, true, pattern.segments.concat('**')));
-                }
-            }
-            // Push the search paths
-            const stack = [];
-            for (const searchPath of getSearchPaths(patterns)) {
-                debug(`Search path '${searchPath}'`);
-                // Exists?
-                try {
-                    // Intentionally using lstat. Detection for broken symlink
-                    // will be performed later (if following symlinks).
-                    yield __await(fs.promises.lstat(searchPath));
-                }
-                catch (err) {
-                    if (err.code === 'ENOENT') {
-                        continue;
-                    }
-                    throw err;
-                }
-                stack.unshift(new SearchState(searchPath, 1));
-            }
-            // Search
-            const traversalChain = []; // used to detect cycles
-            while (stack.length) {
-                // Pop
-                const item = stack.pop();
-                // Match?
-                const match$1 = match(patterns, item.path);
-                const partialMatch$1 = !!match$1 || partialMatch(patterns, item.path);
-                if (!match$1 && !partialMatch$1) {
-                    continue;
-                }
-                // Stat
-                const stats = yield __await(DefaultGlobber.stat(item, options, traversalChain)
-                // Broken symlink, or symlink cycle detected, or no longer exists
-                );
-                // Broken symlink, or symlink cycle detected, or no longer exists
-                if (!stats) {
-                    continue;
-                }
-                // Hidden file or directory?
-                if (options.excludeHiddenFiles && path.basename(item.path).match(/^\./)) {
-                    continue;
-                }
-                // Directory
-                if (stats.isDirectory()) {
-                    // Matched
-                    if (match$1 & MatchKind.Directory && options.matchDirectories) {
-                        yield yield __await(item.path);
-                    }
-                    // Descend?
-                    else if (!partialMatch$1) {
-                        continue;
-                    }
-                    // Push the child items in reverse
-                    const childLevel = item.level + 1;
-                    const childItems = (yield __await(fs.promises.readdir(item.path))).map(x => new SearchState(path.join(item.path, x), childLevel));
-                    stack.push(...childItems.reverse());
-                }
-                // File
-                else if (match$1 & MatchKind.File) {
-                    yield yield __await(item.path);
-                }
-            }
-        });
-    }
-    /**
-     * Constructs a DefaultGlobber
-     */
-    static create(patterns, options) {
-        return __awaiter$b(this, void 0, void 0, function* () {
-            const result = new DefaultGlobber(options);
-            if (IS_WINDOWS$3) {
-                patterns = patterns.replace(/\r\n/g, '\n');
-                patterns = patterns.replace(/\r/g, '\n');
-            }
-            const lines = patterns.split('\n').map(x => x.trim());
-            for (const line of lines) {
-                // Empty or comment
-                if (!line || line.startsWith('#')) {
-                    continue;
-                }
-                // Pattern
-                else {
-                    result.patterns.push(new Pattern(line));
-                }
-            }
-            result.searchPaths.push(...getSearchPaths(result.patterns));
-            return result;
-        });
-    }
-    static stat(item, options, traversalChain) {
-        return __awaiter$b(this, void 0, void 0, function* () {
-            // Note:
-            // `stat` returns info about the target of a symlink (or symlink chain)
-            // `lstat` returns info about a symlink itself
-            let stats;
-            if (options.followSymbolicLinks) {
-                try {
-                    // Use `stat` (following symlinks)
-                    stats = yield fs.promises.stat(item.path);
-                }
-                catch (err) {
-                    if (err.code === 'ENOENT') {
-                        if (options.omitBrokenSymbolicLinks) {
-                            debug(`Broken symlink '${item.path}'`);
-                            return undefined;
-                        }
-                        throw new Error(`No information found for the path '${item.path}'. This may indicate a broken symbolic link.`);
-                    }
-                    throw err;
-                }
-            }
-            else {
-                // Use `lstat` (not following symlinks)
-                stats = yield fs.promises.lstat(item.path);
-            }
-            // Note, isDirectory() returns false for the lstat of a symlink
-            if (stats.isDirectory() && options.followSymbolicLinks) {
-                // Get the realpath
-                const realPath = yield fs.promises.realpath(item.path);
-                // Fixup the traversal chain to match the item level
-                while (traversalChain.length >= item.level) {
-                    traversalChain.pop();
-                }
-                // Test for a cycle
-                if (traversalChain.some((x) => x === realPath)) {
-                    debug(`Symlink cycle detected for path '${item.path}' and realpath '${realPath}'`);
-                    return undefined;
-                }
-                // Update the traversal chain
-                traversalChain.push(realPath);
-            }
-            return stats;
-        });
-    }
-}
+process.platform === 'win32';
 
-var __awaiter$a = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+(undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
@@ -32029,68 +34905,15 @@ var __awaiter$a = (undefined && undefined.__awaiter) || function (thisArg, _argu
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __asyncValues = (undefined && undefined.__asyncValues) || function (o) {
+(undefined && undefined.__asyncValues) || function (o) {
     if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
     var m = o[Symbol.asyncIterator], i;
     return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
     function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
     function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
 };
-function hashFiles$1(globber_1, currentWorkspace_1) {
-    return __awaiter$a(this, arguments, void 0, function* (globber, currentWorkspace, verbose = false) {
-        var _a, e_1, _b, _c;
-        var _d;
-        const writeDelegate = verbose ? info : debug;
-        let hasMatch = false;
-        const githubWorkspace = currentWorkspace
-            ? currentWorkspace
-            : ((_d = process.env['GITHUB_WORKSPACE']) !== null && _d !== void 0 ? _d : process.cwd());
-        const result = crypto$1.createHash('sha256');
-        let count = 0;
-        try {
-            for (var _e = true, _f = __asyncValues(globber.globGenerator()), _g; _g = yield _f.next(), _a = _g.done, !_a; _e = true) {
-                _c = _g.value;
-                _e = false;
-                const file = _c;
-                writeDelegate(file);
-                if (!file.startsWith(`${githubWorkspace}${path.sep}`)) {
-                    writeDelegate(`Ignore '${file}' since it is not under GITHUB_WORKSPACE.`);
-                    continue;
-                }
-                if (fs.statSync(file).isDirectory()) {
-                    writeDelegate(`Skip directory '${file}'.`);
-                    continue;
-                }
-                const hash = crypto$1.createHash('sha256');
-                const pipeline = util$8.promisify(stream.pipeline);
-                yield pipeline(fs.createReadStream(file), hash);
-                result.write(hash.digest());
-                count++;
-                if (!hasMatch) {
-                    hasMatch = true;
-                }
-            }
-        }
-        catch (e_1_1) { e_1 = { error: e_1_1 }; }
-        finally {
-            try {
-                if (!_e && !_a && (_b = _f.return)) yield _b.call(_f);
-            }
-            finally { if (e_1) throw e_1.error; }
-        }
-        result.end();
-        if (hasMatch) {
-            writeDelegate(`Found ${count} files to hash.`);
-            return result.digest('hex');
-        }
-        else {
-            writeDelegate(`No matches found for glob`);
-            return '';
-        }
-    });
-}
 
-var __awaiter$9 = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+(undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
@@ -32099,35 +34922,6 @@ var __awaiter$9 = (undefined && undefined.__awaiter) || function (thisArg, _argu
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-/**
- * Constructs a globber
- *
- * @param patterns  Patterns separated by newlines
- * @param options   Glob options
- */
-function create(patterns, options) {
-    return __awaiter$9(this, void 0, void 0, function* () {
-        return yield DefaultGlobber.create(patterns, options);
-    });
-}
-/**
- * Computes the sha256 hash of a glob
- *
- * @param patterns  Patterns separated by newlines
- * @param currentWorkspace  Workspace used when matching files
- * @param options   Glob options
- * @param verbose   Enables verbose logging
- */
-function hashFiles(patterns_1) {
-    return __awaiter$9(this, arguments, void 0, function* (patterns, currentWorkspace = '', options, verbose = false) {
-        let followSymbolicLinks = true;
-        if (options && typeof options.followSymbolicLinks === 'boolean') {
-            followSymbolicLinks = options.followSymbolicLinks;
-        }
-        const globber = yield create(patterns, { followSymbolicLinks });
-        return hashFiles$1(globber, currentWorkspace, verbose);
-    });
-}
 
 var re = {exports: {}};
 
@@ -32200,7 +34994,7 @@ var hasRequiredRe;
 function requireRe () {
 	if (hasRequiredRe) return re.exports;
 	hasRequiredRe = 1;
-	(function (module, exports$1) {
+	(function (module, exports) {
 
 		const {
 		  MAX_SAFE_COMPONENT_LENGTH,
@@ -32208,14 +35002,14 @@ function requireRe () {
 		  MAX_LENGTH,
 		} = requireConstants();
 		const debug = requireDebug();
-		exports$1 = module.exports = {};
+		exports = module.exports = {};
 
 		// The actual regexps go on exports.re
-		const re = exports$1.re = [];
-		const safeRe = exports$1.safeRe = [];
-		const src = exports$1.src = [];
-		const safeSrc = exports$1.safeSrc = [];
-		const t = exports$1.t = {};
+		const re = exports.re = [];
+		const safeRe = exports.safeRe = [];
+		const src = exports.src = [];
+		const safeSrc = exports.safeSrc = [];
+		const t = exports.t = {};
 		let R = 0;
 
 		const LETTERDASHNUMBER = '[a-zA-Z0-9-]';
@@ -32338,7 +35132,7 @@ function requireRe () {
 		createToken('GTLT', '((?:<|>)?=?)');
 
 		// Something like "2.*" or "1.2.x".
-		// Note that "x.x" is a valid xRange identifer, meaning "any version"
+		// Note that "x.x" is a valid xRange identifier, meaning "any version"
 		// Only the first item is strictly required.
 		createToken('XRANGEIDENTIFIERLOOSE', `${src[t.NUMERICIDENTIFIERLOOSE]}|x|X|\\*`);
 		createToken('XRANGEIDENTIFIER', `${src[t.NUMERICIDENTIFIER]}|x|X|\\*`);
@@ -32379,7 +35173,7 @@ function requireRe () {
 		createToken('LONETILDE', '(?:~>?)');
 
 		createToken('TILDETRIM', `(\\s*)${src[t.LONETILDE]}\\s+`, true);
-		exports$1.tildeTrimReplace = '$1~';
+		exports.tildeTrimReplace = '$1~';
 
 		createToken('TILDE', `^${src[t.LONETILDE]}${src[t.XRANGEPLAIN]}$`);
 		createToken('TILDELOOSE', `^${src[t.LONETILDE]}${src[t.XRANGEPLAINLOOSE]}$`);
@@ -32389,7 +35183,7 @@ function requireRe () {
 		createToken('LONECARET', '(?:\\^)');
 
 		createToken('CARETTRIM', `(\\s*)${src[t.LONECARET]}\\s+`, true);
-		exports$1.caretTrimReplace = '$1^';
+		exports.caretTrimReplace = '$1^';
 
 		createToken('CARET', `^${src[t.LONECARET]}${src[t.XRANGEPLAIN]}$`);
 		createToken('CARETLOOSE', `^${src[t.LONECARET]}${src[t.XRANGEPLAINLOOSE]}$`);
@@ -32402,7 +35196,7 @@ function requireRe () {
 		// it modifies, so that `> 1.2.3` ==> `>1.2.3`
 		createToken('COMPARATORTRIM', `(\\s*)${src[t.GTLT]
 		}\\s*(${src[t.LOOSEPLAIN]}|${src[t.XRANGEPLAIN]})`, true);
-		exports$1.comparatorTrimReplace = '$1$2$3';
+		exports.comparatorTrimReplace = '$1$2$3';
 
 		// Something like `1.2.3 - 1.2.4`
 		// Note that these all use the loose form, because they'll be
@@ -32502,6 +35296,22 @@ function requireSemver$1 () {
 
 	const parseOptions = requireParseOptions();
 	const { compareIdentifiers } = requireIdentifiers();
+
+	const isPrereleaseIdentifier = (prerelease, identifier) => {
+	  const identifiers = identifier.split('.');
+	  if (identifiers.length > prerelease.length) {
+	    return false
+	  }
+
+	  for (let i = 0; i < identifiers.length; i++) {
+	    if (compareIdentifiers(prerelease[i], identifiers[i]) !== 0) {
+	      return false
+	    }
+	  }
+
+	  return true
+	};
+
 	class SemVer {
 	  constructor (version, options) {
 	    options = parseOptions(options);
@@ -32805,8 +35615,9 @@ function requireSemver$1 () {
 	          if (identifierBase === false) {
 	            prerelease = [identifier];
 	          }
-	          if (compareIdentifiers(this.prerelease[0], identifier) === 0) {
-	            if (isNaN(this.prerelease[1])) {
+	          if (isPrereleaseIdentifier(this.prerelease, identifier)) {
+	            const prereleaseBase = this.prerelease[identifier.split('.').length];
+	            if (isNaN(prereleaseBase)) {
 	              this.prerelease = prerelease;
 	            }
 	          } else {
@@ -33334,6 +36145,62 @@ function requireCoerce () {
 	return coerce_1;
 }
 
+var truncate_1;
+var hasRequiredTruncate;
+
+function requireTruncate () {
+	if (hasRequiredTruncate) return truncate_1;
+	hasRequiredTruncate = 1;
+
+	const parse = requireParse();
+	const constants = requireConstants();
+	const SemVer = requireSemver$1();
+
+	const truncate = (version, truncation, options) => {
+	  if (!constants.RELEASE_TYPES.includes(truncation)) {
+	    return null
+	  }
+
+	  const clonedVersion = cloneInputVersion(version, options);
+	  return clonedVersion && doTruncation(clonedVersion, truncation)
+	};
+
+	const cloneInputVersion = (version, options) => {
+	  const versionStringToParse = (
+	    version instanceof SemVer ? version.version : version
+	  );
+
+	  return parse(versionStringToParse, options)
+	};
+
+	const doTruncation = (version, truncation) => {
+	  if (isPrerelease(truncation)) {
+	    return version.version
+	  }
+
+	  version.prerelease = [];
+
+	  switch (truncation) {
+	    case 'major':
+	      version.minor = 0;
+	      version.patch = 0;
+	      break
+	    case 'minor':
+	      version.patch = 0;
+	      break
+	  }
+
+	  return version.format()
+	};
+
+	const isPrerelease = (type) => {
+	  return type.startsWith('pre')
+	};
+
+	truncate_1 = truncate;
+	return truncate_1;
+}
+
 var lrucache;
 var hasRequiredLrucache;
 
@@ -33489,6 +36356,9 @@ function requireRange () {
 	  }
 
 	  parseRange (range) {
+	    // strip build metadata so it can't bleed into the version
+	    range = range.replace(BUILDSTRIPRE, '');
+
 	    // memoize range parsing for performance.
 	    // this is a very hot path, and fully deterministic.
 	    const memoOpts =
@@ -33614,12 +36484,16 @@ function requireRange () {
 	const SemVer = requireSemver$1();
 	const {
 	  safeRe: re,
+	  src,
 	  t,
 	  comparatorTrimReplace,
 	  tildeTrimReplace,
 	  caretTrimReplace,
 	} = requireRe();
 	const { FLAG_INCLUDE_PRERELEASE, FLAG_LOOSE } = requireConstants();
+
+	// unbounded global build-metadata stripper used by parseRange
+	const BUILDSTRIPRE = new RegExp(src[t.BUILD], 'g');
 
 	const isNullSet = c => c.value === '<0.0.0-0';
 	const isAny = c => c.value === '';
@@ -34672,7 +37546,7 @@ function requireSubset () {
 	        if (higher === c && higher !== gt) {
 	          return false
 	        }
-	      } else if (gt.operator === '>=' && !satisfies(gt.semver, String(c), options)) {
+	      } else if (gt.operator === '>=' && !c.test(gt.semver)) {
 	        return false
 	      }
 	    }
@@ -34690,7 +37564,7 @@ function requireSubset () {
 	        if (lower === c && lower !== lt) {
 	          return false
 	        }
-	      } else if (lt.operator === '<=' && !satisfies(lt.semver, String(c), options)) {
+	      } else if (lt.operator === '<=' && !c.test(lt.semver)) {
 	        return false
 	      }
 	    }
@@ -34783,6 +37657,7 @@ function requireSemver () {
 	const lte = requireLte();
 	const cmp = requireCmp();
 	const coerce = requireCoerce();
+	const truncate = requireTruncate();
 	const Comparator = requireComparator();
 	const Range = requireRange();
 	const satisfies = requireSatisfies();
@@ -34821,6 +37696,7 @@ function requireSemver () {
 	  lte,
 	  cmp,
 	  coerce,
+	  truncate,
 	  Comparator,
 	  Range,
 	  satisfies,
@@ -34881,6 +37757,10 @@ const GnuTarPathOnWindows = `${process.env['PROGRAMFILES']}\\Git\\usr\\bin\\tar.
 const SystemTarPathOnWindows = `${process.env['SYSTEMDRIVE']}\\Windows\\System32\\tar.exe`;
 const TarFilename = 'cache.tar';
 const ManifestFilename = 'manifest.txt';
+// Prefix the cache backend embeds in a read-denial message (v2 twirp
+// GetCacheEntryDownloadURL error or the GHES v1 `_apis/artifactcache` 403 body).
+// Shared so cache.ts and cacheHttpClient.ts match the same contract value.
+const CacheReadDeniedMessagePrefix = 'cache read denied:';
 
 var __awaiter$8 = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -34918,9 +37798,9 @@ function createTempDirectory() {
                     baseLocation = '/home';
                 }
             }
-            tempDirectory = path.join(baseLocation, 'actions', 'temp');
+            tempDirectory = path$1.join(baseLocation, 'actions', 'temp');
         }
-        const dest = path.join(tempDirectory, crypto$1.randomUUID());
+        const dest = path$1.join(tempDirectory, crypto$1.randomUUID());
         yield mkdirP(dest);
         return dest;
     });
@@ -35054,7 +37934,26 @@ function log(message, ...args) {
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-const debugEnvVariable = (typeof process !== "undefined" && process.env && process.env.DEBUG) || undefined;
+/**
+ * Returns the value of the specified environment variable.
+ *
+ * @internal
+ */
+function getEnvironmentVariable(name) {
+    return process$1.env[name];
+}
+/**
+ * A constant that indicates whether the environment the code is running is Deno.
+ */
+typeof process$1.versions.deno === "string" && process$1.versions.deno.length > 0;
+/**
+ * A constant that indicates whether the environment the code is running is Bun.sh.
+ */
+typeof process$1.versions.bun === "string" && process$1.versions.bun.length > 0;
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+const debugEnvVariable = getEnvironmentVariable("DEBUG");
 let enabledString;
 let enabledNamespaces = [];
 let skippedNamespaces = [];
@@ -35259,8 +38158,7 @@ function isTypeSpecRuntimeLogLevel(level) {
  */
 function createLoggerContext(options) {
     const registeredLoggers = new Set();
-    const logLevelFromEnv = (typeof process !== "undefined" && process.env && process.env[options.logLevelEnvVarName]) ||
-        undefined;
+    const logLevelFromEnv = getEnvironmentVariable(options.logLevelEnvVarName);
     let logLevel;
     const clientLogger = debugObj(options.namespace);
     clientLogger.log = (...args) => {
@@ -35341,6 +38239,16 @@ function createClientLogger$1(namespace) {
 function normalizeName(name) {
     return name.toLowerCase();
 }
+/**
+ * Removes CR and LF characters from a header value to prevent obs-fold
+ * (line folding) sequences, as forbidden by RFC 7230 §3.2.4.
+ * @param value - The header value to sanitize.
+ */
+function normalizeValue(value) {
+    return String(value)
+        .trim()
+        .replace(/[\r\n]/g, "");
+}
 function* headerIterator(map) {
     for (const entry of map.values()) {
         yield [entry.name, entry.value];
@@ -35363,7 +38271,7 @@ class HttpHeadersImpl {
      * @param value - The value of the header to set.
      */
     set(name, value) {
-        this._headersMap.set(normalizeName(name), { name, value: String(value).trim() });
+        this._headersMap.set(normalizeName(name), { name, value: normalizeValue(value) });
     }
     /**
      * Get the header value for the provided header name, or undefined if no header exists in this
@@ -35858,13 +38766,13 @@ class Sanitizer {
                     message: value.message,
                 };
             }
-            if (key === "headers") {
+            if (key === "headers" && isObject(value)) {
                 return this.sanitizeHeaders(value);
             }
-            else if (key === "url") {
+            else if (key === "url" && typeof value === "string") {
                 return this.sanitizeUrl(value);
             }
-            else if (key === "query") {
+            else if (key === "query" && isObject(value)) {
                 return this.sanitizeQuery(value);
             }
             else if (key === "body") {
@@ -36032,13 +38940,16 @@ function isRestError$1(e) {
  * @param format - the format we use to encode the byte
  * @returns a string of the encoded string
  */
+function uint8ArrayToString$1(bytes, format) {
+    return Buffer.from(bytes).toString(format);
+}
 /**
  * The helper that transforms string to specific character encoded bytes array.
  * @param value - the string to be converted
  * @param format - the format we use to decode the value
  * @returns a uint8array
  */
-function stringToUint8Array(value, format) {
+function stringToUint8Array$1(value, format) {
     return Buffer.from(value, format);
 }
 
@@ -36247,7 +39158,9 @@ class NodeHttpClient {
                     req.end(body);
                 }
                 else if (isArrayBuffer(body)) {
-                    req.end(ArrayBuffer.isView(body) ? Buffer.from(body.buffer) : Buffer.from(body));
+                    req.end(ArrayBuffer.isView(body)
+                        ? Buffer.from(body.buffer, body.byteOffset, body.byteLength)
+                        : Buffer.from(body));
                 }
                 else {
                     logger$4.error("Unrecognized body type", body);
@@ -36426,82 +39339,7 @@ function logPolicy$1(options = {}) {
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-/**
- * The programmatic identifier of the redirectPolicy.
- */
-const redirectPolicyName$1 = "redirectPolicy";
-/**
- * Methods that are allowed to follow redirects 301 and 302
- */
-const allowedRedirect = ["GET", "HEAD"];
-/**
- * A policy to follow Location headers from the server in order
- * to support server-side redirection.
- * In the browser, this policy is not used.
- * @param options - Options to control policy behavior.
- */
-function redirectPolicy$1(options = {}) {
-    const { maxRetries = 20 } = options;
-    return {
-        name: redirectPolicyName$1,
-        async sendRequest(request, next) {
-            const response = await next(request);
-            return handleRedirect(next, response, maxRetries);
-        },
-    };
-}
-async function handleRedirect(next, response, maxRetries, currentRetries = 0) {
-    const { request, status, headers } = response;
-    const locationHeader = headers.get("location");
-    if (locationHeader &&
-        (status === 300 ||
-            (status === 301 && allowedRedirect.includes(request.method)) ||
-            (status === 302 && allowedRedirect.includes(request.method)) ||
-            (status === 303 && request.method === "POST") ||
-            status === 307) &&
-        currentRetries < maxRetries) {
-        const url = new URL(locationHeader, request.url);
-        request.url = url.toString();
-        // POST request with Status code 303 should be converted into a
-        // redirected GET request if the redirect url is present in the location header
-        if (status === 303) {
-            request.method = "GET";
-            request.headers.delete("Content-Length");
-            delete request.body;
-        }
-        request.headers.delete("Authorization");
-        const res = await next(request);
-        return handleRedirect(next, res, maxRetries, currentRetries + 1);
-    }
-    return response;
-}
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
 const DEFAULT_RETRY_POLICY_COUNT = 3;
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-/**
- * The programmatic identifier of the decompressResponsePolicy.
- */
-const decompressResponsePolicyName$1 = "decompressResponsePolicy";
-/**
- * A policy to enable response decompression according to Accept-Encoding header
- * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept-Encoding
- */
-function decompressResponsePolicy$1() {
-    return {
-        name: decompressResponsePolicyName$1,
-        async sendRequest(request, next) {
-            // HEAD requests have no body
-            if (request.method !== "HEAD") {
-                request.headers.set("Accept-Encoding", "gzip,deflate");
-            }
-            return next(request);
-        },
-    };
-}
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -36766,11 +39604,11 @@ function retryPolicy(strategies, options = { maxRetries: DEFAULT_RETRY_POLICY_CO
                     // RestErrors are valid targets for the retry strategies.
                     // If none of the retry strategies can work with them, they will be thrown later in this policy.
                     // If the received error is not a RestError, it is immediately thrown.
-                    responseError = e;
-                    if (!e || responseError.name !== "RestError") {
+                    if (!isRestError$1(e)) {
                         throw e;
                     }
-                    response = responseError.response;
+                    responseError = e;
+                    response = e.response;
                 }
                 if (request.abortSignal?.aborted) {
                     logger.error(`Retry ${retryCount}: Request aborted.`);
@@ -36858,25 +39696,28 @@ function defaultRetryPolicy$1(options = {}) {
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 /**
- * A constant that indicates whether the environment the code is running is a Web Browser.
+ * If the request body is a native FormData, convert it to our FormDataMap
+ * representation and clear the body. Node.js's HTTP stack doesn't handle
+ * FormData natively, so the pipeline must serialize it later.
+ *
+ * @internal
  */
-// eslint-disable-next-line @azure/azure-sdk/ts-no-window
-/**
- * A constant that indicates whether the environment the code is running is Deno.
- */
-typeof Deno !== "undefined" &&
-    typeof Deno.version !== "undefined" &&
-    typeof Deno.version.deno !== "undefined";
-/**
- * A constant that indicates whether the environment the code is running is Bun.sh.
- */
-typeof Bun !== "undefined" && typeof Bun.version !== "undefined";
-/**
- * A constant that indicates whether the environment the code is running is a Node.js compatible environment.
- */
-const isNodeLike$1 = typeof globalThis.process !== "undefined" &&
-    Boolean(globalThis.process.version) &&
-    Boolean(globalThis.process.versions?.node);
+function convertBodyToFormDataMap(body) {
+    if (typeof FormData !== "undefined" && body instanceof FormData) {
+        const formDataMap = {};
+        for (const [key, value] of body.entries()) {
+            const existing = formDataMap[key];
+            if (Array.isArray(existing)) {
+                existing.push(value);
+            }
+            else {
+                formDataMap[key] = existing !== undefined ? [existing, value] : [value];
+            }
+        }
+        return formDataMap;
+    }
+    return undefined;
+}
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -36884,14 +39725,6 @@ const isNodeLike$1 = typeof globalThis.process !== "undefined" &&
  * The programmatic identifier of the formDataPolicy.
  */
 const formDataPolicyName = "formDataPolicy";
-function formDataToFormDataMap(formData) {
-    const formDataMap = {};
-    for (const [key, value] of formData.entries()) {
-        formDataMap[key] ??= [];
-        formDataMap[key].push(value);
-    }
-    return formDataMap;
-}
 /**
  * A policy that encodes FormData on the request into the body.
  */
@@ -36899,8 +39732,9 @@ function formDataPolicy$1() {
     return {
         name: formDataPolicyName,
         async sendRequest(request, next) {
-            if (isNodeLike$1 && typeof FormData !== "undefined" && request.body instanceof FormData) {
-                request.formData = formDataToFormDataMap(request.body);
+            const converted = convertBodyToFormDataMap(request.body);
+            if (converted) {
+                request.formData = converted;
                 request.body = undefined;
             }
             if (request.formData) {
@@ -36948,7 +39782,7 @@ async function prepareFormData(formData, request) {
                     headers: createHttpHeaders$1({
                         "Content-Disposition": `form-data; name="${fieldName}"`,
                     }),
-                    body: stringToUint8Array(value, "utf-8"),
+                    body: stringToUint8Array$1(value, "utf-8"),
                 });
             }
             else if (value === undefined || value === null || typeof value !== "object") {
@@ -36969,6 +39803,50 @@ async function prepareFormData(formData, request) {
         }
     }
     request.multipartBody = { parts };
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * Name of the Agent Policy
+ */
+const agentPolicyName = "agentPolicy";
+/**
+ * Gets a pipeline policy that sets http.agent
+ */
+function agentPolicy$1(agent) {
+    return {
+        name: agentPolicyName,
+        sendRequest: async (req, next) => {
+            // Users may define an agent on the request, honor it over the client level one
+            if (!req.agent) {
+                req.agent = agent;
+            }
+            return next(req);
+        },
+    };
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * Name of the TLS Policy
+ */
+const tlsPolicyName = "tlsPolicy";
+/**
+ * Gets a pipeline policy that adds the client certificate to the HttpClient agent for authentication.
+ */
+function tlsPolicy$1(tlsSettings) {
+    return {
+        name: tlsPolicyName,
+        sendRequest: async (req, next) => {
+            // Users may define a request tlsSettings, honor those over the client level one
+            if (!req.tlsSettings) {
+                req.tlsSettings = tlsSettings;
+            }
+            return next(req);
+        },
+    };
 }
 
 var dist$2 = {};
@@ -37455,17 +40333,17 @@ var hasRequiredBrowser;
 function requireBrowser () {
 	if (hasRequiredBrowser) return browser.exports;
 	hasRequiredBrowser = 1;
-	(function (module, exports$1) {
+	(function (module, exports) {
 		/**
 		 * This is the web browser implementation of `debug()`.
 		 */
 
-		exports$1.formatArgs = formatArgs;
-		exports$1.save = save;
-		exports$1.load = load;
-		exports$1.useColors = useColors;
-		exports$1.storage = localstorage();
-		exports$1.destroy = (() => {
+		exports.formatArgs = formatArgs;
+		exports.save = save;
+		exports.load = load;
+		exports.useColors = useColors;
+		exports.storage = localstorage();
+		exports.destroy = (() => {
 			let warned = false;
 
 			return () => {
@@ -37480,7 +40358,7 @@ function requireBrowser () {
 		 * Colors.
 		 */
 
-		exports$1.colors = [
+		exports.colors = [
 			'#0000CC',
 			'#0000FF',
 			'#0033CC',
@@ -37645,7 +40523,7 @@ function requireBrowser () {
 		 *
 		 * @api public
 		 */
-		exports$1.log = console.debug || console.log || (() => {});
+		exports.log = console.debug || console.log || (() => {});
 
 		/**
 		 * Save `namespaces`.
@@ -37656,9 +40534,9 @@ function requireBrowser () {
 		function save(namespaces) {
 			try {
 				if (namespaces) {
-					exports$1.storage.setItem('debug', namespaces);
+					exports.storage.setItem('debug', namespaces);
 				} else {
-					exports$1.storage.removeItem('debug');
+					exports.storage.removeItem('debug');
 				}
 			} catch (error) {
 				// Swallow
@@ -37675,7 +40553,7 @@ function requireBrowser () {
 		function load() {
 			let r;
 			try {
-				r = exports$1.storage.getItem('debug') || exports$1.storage.getItem('DEBUG') ;
+				r = exports.storage.getItem('debug') || exports.storage.getItem('DEBUG') ;
 			} catch (error) {
 				// Swallow
 				// XXX (@Qix-) should we be logging these?
@@ -37711,7 +40589,7 @@ function requireBrowser () {
 			}
 		}
 
-		module.exports = requireCommon()(exports$1);
+		module.exports = requireCommon()(exports);
 
 		const {formatters} = module.exports;
 
@@ -37900,7 +40778,7 @@ var hasRequiredNode;
 function requireNode () {
 	if (hasRequiredNode) return node.exports;
 	hasRequiredNode = 1;
-	(function (module, exports$1) {
+	(function (module, exports) {
 		const tty = require$$1$5;
 		const util = util__default;
 
@@ -37908,13 +40786,13 @@ function requireNode () {
 		 * This is the Node.js implementation of `debug()`.
 		 */
 
-		exports$1.init = init;
-		exports$1.log = log;
-		exports$1.formatArgs = formatArgs;
-		exports$1.save = save;
-		exports$1.load = load;
-		exports$1.useColors = useColors;
-		exports$1.destroy = util.deprecate(
+		exports.init = init;
+		exports.log = log;
+		exports.formatArgs = formatArgs;
+		exports.save = save;
+		exports.load = load;
+		exports.useColors = useColors;
+		exports.destroy = util.deprecate(
 			() => {},
 			'Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.'
 		);
@@ -37923,7 +40801,7 @@ function requireNode () {
 		 * Colors.
 		 */
 
-		exports$1.colors = [6, 2, 3, 4, 5, 1];
+		exports.colors = [6, 2, 3, 4, 5, 1];
 
 		try {
 			// Optional dependency (as in, doesn't need to be installed, NOT like optionalDependencies in package.json)
@@ -37931,7 +40809,7 @@ function requireNode () {
 			const supportsColor = requireSupportsColor();
 
 			if (supportsColor && (supportsColor.stderr || supportsColor).level >= 2) {
-				exports$1.colors = [
+				exports.colors = [
 					20,
 					21,
 					26,
@@ -38020,7 +40898,7 @@ function requireNode () {
 		 *   $ DEBUG_COLORS=no DEBUG_DEPTH=10 DEBUG_SHOW_HIDDEN=enabled node script.js
 		 */
 
-		exports$1.inspectOpts = Object.keys(process.env).filter(key => {
+		exports.inspectOpts = Object.keys(process.env).filter(key => {
 			return /^debug_/i.test(key);
 		}).reduce((obj, key) => {
 			// Camel-case
@@ -38052,8 +40930,8 @@ function requireNode () {
 		 */
 
 		function useColors() {
-			return 'colors' in exports$1.inspectOpts ?
-				Boolean(exports$1.inspectOpts.colors) :
+			return 'colors' in exports.inspectOpts ?
+				Boolean(exports.inspectOpts.colors) :
 				tty.isatty(process.stderr.fd);
 		}
 
@@ -38079,7 +40957,7 @@ function requireNode () {
 		}
 
 		function getDate() {
-			if (exports$1.inspectOpts.hideDate) {
+			if (exports.inspectOpts.hideDate) {
 				return '';
 			}
 			return new Date().toISOString() + ' ';
@@ -38090,7 +40968,7 @@ function requireNode () {
 		 */
 
 		function log(...args) {
-			return process.stderr.write(util.formatWithOptions(exports$1.inspectOpts, ...args) + '\n');
+			return process.stderr.write(util.formatWithOptions(exports.inspectOpts, ...args) + '\n');
 		}
 
 		/**
@@ -38130,13 +41008,13 @@ function requireNode () {
 		function init(debug) {
 			debug.inspectOpts = {};
 
-			const keys = Object.keys(exports$1.inspectOpts);
+			const keys = Object.keys(exports.inspectOpts);
 			for (let i = 0; i < keys.length; i++) {
-				debug.inspectOpts[keys[i]] = exports$1.inspectOpts[keys[i]];
+				debug.inspectOpts[keys[i]] = exports.inspectOpts[keys[i]];
 			}
 		}
 
-		module.exports = requireCommon()(exports$1);
+		module.exports = requireCommon()(exports);
 
 		const {formatters} = module.exports;
 
@@ -38264,7 +41142,7 @@ var hasRequiredDist$2;
 function requireDist$2 () {
 	if (hasRequiredDist$2) return dist$1;
 	hasRequiredDist$2 = 1;
-	(function (exports$1) {
+	(function (exports) {
 		var __createBinding = (dist$1 && dist$1.__createBinding) || (Object.create ? (function(o, m, k, k2) {
 		    if (k2 === undefined) k2 = k;
 		    var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -38288,15 +41166,15 @@ function requireDist$2 () {
 		    __setModuleDefault(result, mod);
 		    return result;
 		};
-		var __exportStar = (dist$1 && dist$1.__exportStar) || function(m, exports$1) {
-		    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports$1, p)) __createBinding(exports$1, m, p);
+		var __exportStar = (dist$1 && dist$1.__exportStar) || function(m, exports) {
+		    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 		};
-		Object.defineProperty(exports$1, "__esModule", { value: true });
-		exports$1.Agent = void 0;
+		Object.defineProperty(exports, "__esModule", { value: true });
+		exports.Agent = void 0;
 		const net = __importStar(require$$0$7);
 		const http = __importStar(http__default);
 		const https_1 = https__default;
-		__exportStar(requireHelpers(), exports$1);
+		__exportStar(requireHelpers(), exports);
 		const INTERNAL = Symbol('AgentBaseInternalState');
 		class Agent extends http.Agent {
 		    constructor(opts) {
@@ -38440,7 +41318,7 @@ function requireDist$2 () {
 		        }
 		    }
 		}
-		exports$1.Agent = Agent;
+		exports.Agent = Agent;
 		
 	} (dist$1));
 	return dist$1;
@@ -39046,16 +41924,15 @@ function setProxyAgentOnRequest(request, cachedAgents, proxyUrl) {
     if (request.tlsSettings) {
         logger$4.warning("TLS settings are not supported in combination with custom Proxy, certificates provided to the client will be ignored.");
     }
-    const headers = request.headers.toJSON();
     if (isInsecure) {
         if (!cachedAgents.httpProxyAgent) {
-            cachedAgents.httpProxyAgent = new distExports.HttpProxyAgent(proxyUrl, { headers });
+            cachedAgents.httpProxyAgent = new distExports.HttpProxyAgent(proxyUrl);
         }
         request.agent = cachedAgents.httpProxyAgent;
     }
     else {
         if (!cachedAgents.httpsProxyAgent) {
-            cachedAgents.httpsProxyAgent = new distExports$1.HttpsProxyAgent(proxyUrl, { headers });
+            cachedAgents.httpsProxyAgent = new distExports$1.HttpsProxyAgent(proxyUrl);
         }
         request.agent = cachedAgents.httpsProxyAgent;
     }
@@ -39094,21 +41971,22 @@ function proxyPolicy$1(proxySettings, options) {
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 /**
- * Name of the Agent Policy
+ * The programmatic identifier of the decompressResponsePolicy.
  */
-const agentPolicyName = "agentPolicy";
+const decompressResponsePolicyName$1 = "decompressResponsePolicy";
 /**
- * Gets a pipeline policy that sets http.agent
+ * A policy to enable response decompression according to Accept-Encoding header
+ * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept-Encoding
  */
-function agentPolicy$1(agent) {
+function decompressResponsePolicy$1() {
     return {
-        name: agentPolicyName,
-        sendRequest: async (req, next) => {
-            // Users may define an agent on the request, honor it over the client level one
-            if (!req.agent) {
-                req.agent = agent;
+        name: decompressResponsePolicyName$1,
+        async sendRequest(request, next) {
+            // HEAD requests have no body
+            if (request.method !== "HEAD") {
+                request.headers.set("Accept-Encoding", "gzip,deflate");
             }
-            return next(req);
+            return next(request);
         },
     };
 }
@@ -39116,29 +41994,67 @@ function agentPolicy$1(agent) {
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 /**
- * Name of the TLS Policy
+ * The programmatic identifier of the redirectPolicy.
  */
-const tlsPolicyName = "tlsPolicy";
+const redirectPolicyName$1 = "redirectPolicy";
 /**
- * Gets a pipeline policy that adds the client certificate to the HttpClient agent for authentication.
+ * Methods that are allowed to follow redirects 301 and 302
  */
-function tlsPolicy$1(tlsSettings) {
+const allowedRedirect = ["GET", "HEAD"];
+/**
+ * A policy to follow Location headers from the server in order
+ * to support server-side redirection.
+ * In the browser, this policy is not used.
+ * @param options - Options to control policy behavior.
+ */
+function redirectPolicy$1(options = {}) {
+    const { maxRetries = 20, allowCrossOriginRedirects = false } = options;
     return {
-        name: tlsPolicyName,
-        sendRequest: async (req, next) => {
-            // Users may define a request tlsSettings, honor those over the client level one
-            if (!req.tlsSettings) {
-                req.tlsSettings = tlsSettings;
-            }
-            return next(req);
+        name: redirectPolicyName$1,
+        async sendRequest(request, next) {
+            const response = await next(request);
+            return handleRedirect(next, response, maxRetries, allowCrossOriginRedirects);
         },
     };
+}
+async function handleRedirect(next, response, maxRetries, allowCrossOriginRedirects, currentRetries = 0) {
+    const { request, status, headers } = response;
+    const locationHeader = headers.get("location");
+    if (locationHeader &&
+        (status === 300 ||
+            (status === 301 && allowedRedirect.includes(request.method)) ||
+            (status === 302 && allowedRedirect.includes(request.method)) ||
+            (status === 303 && request.method === "POST") ||
+            status === 307) &&
+        currentRetries < maxRetries) {
+        const url = new URL(locationHeader, request.url);
+        // Only follow redirects to the same origin by default.
+        if (!allowCrossOriginRedirects) {
+            const originalUrl = new URL(request.url);
+            if (url.origin !== originalUrl.origin) {
+                logger$4.verbose(`Skipping cross-origin redirect from ${originalUrl.origin} to ${url.origin}.`);
+                return response;
+            }
+        }
+        request.url = url.toString();
+        // POST request with Status code 303 should be converted into a
+        // redirected GET request if the redirect url is present in the location header
+        if (status === 303) {
+            request.method = "GET";
+            request.headers.delete("Content-Length");
+            delete request.body;
+        }
+        request.headers.delete("Authorization");
+        const res = await next(request);
+        return handleRedirect(next, res, maxRetries, allowCrossOriginRedirects, currentRetries + 1);
+    }
+    return response;
 }
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 function isBlob(x) {
-    return typeof x.stream === "function";
+    return x instanceof Blob;
 }
 
 // Copyright (c) Microsoft Corporation.
@@ -39247,20 +42163,24 @@ function getTotalLength(sources) {
 }
 async function buildRequestBody(request, parts, boundary) {
     const sources = [
-        stringToUint8Array(`--${boundary}`, "utf-8"),
+        stringToUint8Array$1(`--${boundary}`, "utf-8"),
         ...parts.flatMap((part) => [
-            stringToUint8Array("\r\n", "utf-8"),
-            stringToUint8Array(encodeHeaders(part.headers), "utf-8"),
-            stringToUint8Array("\r\n", "utf-8"),
+            stringToUint8Array$1("\r\n", "utf-8"),
+            stringToUint8Array$1(encodeHeaders(part.headers), "utf-8"),
+            stringToUint8Array$1("\r\n", "utf-8"),
             part.body,
-            stringToUint8Array(`\r\n--${boundary}`, "utf-8"),
+            stringToUint8Array$1(`\r\n--${boundary}`, "utf-8"),
         ]),
-        stringToUint8Array("--\r\n\r\n", "utf-8"),
+        stringToUint8Array$1("--\r\n\r\n", "utf-8"),
     ];
     const contentLength = getTotalLength(sources);
     if (contentLength) {
         request.headers.set("Content-Length", contentLength);
     }
+    // The public BodyPart.body type uses Uint8Array (= Uint8Array<ArrayBufferLike>) for
+    // backward compatibility. Internally, concat requires Uint8Array<ArrayBuffer> to ensure
+    // SharedArrayBuffer-backed arrays don't flow into Blob construction. In practice, HTTP
+    // request bodies are always ArrayBuffer-backed, so this narrowing is safe.
     request.body = await concat(sources);
 }
 /**
@@ -39387,22 +42307,21 @@ function getHeaderName() {
 async function setPlatformSpecificData(map) {
     if (process$1 && process$1.versions) {
         const osInfo = `${os$1.type()} ${os$1.release()}; ${os$1.arch()}`;
-        const versions = process$1.versions;
-        if (versions.bun) {
-            map.set("Bun", `${versions.bun} (${osInfo})`);
+        if (process$1.versions.bun) {
+            map.set("Bun", `${process$1.versions.bun} (${osInfo})`);
         }
-        else if (versions.deno) {
-            map.set("Deno", `${versions.deno} (${osInfo})`);
+        else if (process$1.versions.deno) {
+            map.set("Deno", `${process$1.versions.deno} (${osInfo})`);
         }
-        else if (versions.node) {
-            map.set("Node", `${versions.node} (${osInfo})`);
+        else if (process$1.versions.node) {
+            map.set("Node", `${process$1.versions.node} (${osInfo})`);
         }
     }
 }
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-const SDK_VERSION$1 = "1.22.2";
+const SDK_VERSION$1 = "1.24.0";
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -39455,6 +42374,106 @@ function userAgentPolicy(options = {}) {
             return next(request);
         },
     };
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * Private symbol used as key on objects created using createFile containing the
+ * original source of the file object.
+ *
+ * This is used in Node to access the original Node stream without using Blob#stream, which
+ * returns a web stream. This is done to avoid a couple of bugs to do with Blob#stream and
+ * Readable#to/fromWeb in Node versions we support:
+ * - https://github.com/nodejs/node/issues/42694 (fixed in Node 18.14)
+ * - https://github.com/nodejs/node/issues/48916 (fixed in Node 20.6)
+ *
+ * Once these versions are no longer supported, we may be able to stop doing this.
+ *
+ * @internal
+ */
+const rawContent = Symbol("rawContent");
+/**
+ * Type guard to check if a given object is a blob-like object with a raw content property.
+ */
+function hasRawContent(x) {
+    return typeof x[rawContent] === "function";
+}
+/**
+ * Extract the raw content from a given blob-like object. If the input was created using createFile
+ * or createFileFromStream, the exact content passed into createFile/createFileFromStream will be used.
+ * For true instances of Blob and File, returns the actual blob.
+ *
+ * @internal
+ */
+function getRawContent$1(blob) {
+    if (hasRawContent(blob)) {
+        return blob[rawContent]();
+    }
+    else {
+        return blob;
+    }
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * Name of multipart policy
+ */
+const multipartPolicyName = multipartPolicyName$1;
+/**
+ * Pipeline policy for multipart requests
+ */
+function multipartPolicy() {
+    const tspPolicy = multipartPolicy$1();
+    return {
+        name: multipartPolicyName,
+        sendRequest: async (request, next) => {
+            if (request.multipartBody) {
+                for (const part of request.multipartBody.parts) {
+                    if (hasRawContent(part.body)) {
+                        part.body = getRawContent$1(part.body);
+                    }
+                }
+            }
+            return tspPolicy.sendRequest(request, next);
+        },
+    };
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * The programmatic identifier of the decompressResponsePolicy.
+ */
+const decompressResponsePolicyName = decompressResponsePolicyName$1;
+/**
+ * A policy to enable response decompression according to Accept-Encoding header
+ * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept-Encoding
+ */
+function decompressResponsePolicy() {
+    return decompressResponsePolicy$1();
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * A policy that retries according to three strategies:
+ * - When the server sends a 429 response with a Retry-After header.
+ * - When there are errors in the underlying transport layer (e.g. DNS lookup failures).
+ * - Or otherwise if the outgoing request fails, it will retry with an exponentially increasing delay.
+ */
+function defaultRetryPolicy(options = {}) {
+    return defaultRetryPolicy$1(options);
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * A policy that encodes FormData on the request into the body.
+ */
+function formDataPolicy() {
+    return formDataPolicy$1();
 }
 
 // Copyright (c) Microsoft Corporation.
@@ -39594,108 +42613,22 @@ function randomUUID() {
     return randomUUID$1();
 }
 /**
- * A constant that indicates whether the environment the code is running is a Node.js compatible environment.
+ * The helper that transforms bytes with specific character encoding into string
+ * @param bytes - the uint8array bytes
+ * @param format - the format we use to encode the byte
+ * @returns a string of the encoded string
  */
-const isNodeLike = isNodeLike$1;
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-/**
- * Private symbol used as key on objects created using createFile containing the
- * original source of the file object.
- *
- * This is used in Node to access the original Node stream without using Blob#stream, which
- * returns a web stream. This is done to avoid a couple of bugs to do with Blob#stream and
- * Readable#to/fromWeb in Node versions we support:
- * - https://github.com/nodejs/node/issues/42694 (fixed in Node 18.14)
- * - https://github.com/nodejs/node/issues/48916 (fixed in Node 20.6)
- *
- * Once these versions are no longer supported, we may be able to stop doing this.
- *
- * @internal
- */
-const rawContent = Symbol("rawContent");
-/**
- * Type guard to check if a given object is a blob-like object with a raw content property.
- */
-function hasRawContent(x) {
-    return typeof x[rawContent] === "function";
+function uint8ArrayToString(bytes, format) {
+    return uint8ArrayToString$1(bytes, format);
 }
 /**
- * Extract the raw content from a given blob-like object. If the input was created using createFile
- * or createFileFromStream, the exact content passed into createFile/createFileFromStream will be used.
- * For true instances of Blob and File, returns the actual blob.
- *
- * @internal
+ * The helper that transforms string to specific character encoded bytes array.
+ * @param value - the string to be converted
+ * @param format - the format we use to decode the value
+ * @returns a uint8array
  */
-function getRawContent(blob) {
-    if (hasRawContent(blob)) {
-        return blob[rawContent]();
-    }
-    else {
-        return blob;
-    }
-}
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-/**
- * Name of multipart policy
- */
-const multipartPolicyName = multipartPolicyName$1;
-/**
- * Pipeline policy for multipart requests
- */
-function multipartPolicy() {
-    const tspPolicy = multipartPolicy$1();
-    return {
-        name: multipartPolicyName,
-        sendRequest: async (request, next) => {
-            if (request.multipartBody) {
-                for (const part of request.multipartBody.parts) {
-                    if (hasRawContent(part.body)) {
-                        part.body = getRawContent(part.body);
-                    }
-                }
-            }
-            return tspPolicy.sendRequest(request, next);
-        },
-    };
-}
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-/**
- * The programmatic identifier of the decompressResponsePolicy.
- */
-const decompressResponsePolicyName = decompressResponsePolicyName$1;
-/**
- * A policy to enable response decompression according to Accept-Encoding header
- * https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept-Encoding
- */
-function decompressResponsePolicy() {
-    return decompressResponsePolicy$1();
-}
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-/**
- * A policy that retries according to three strategies:
- * - When the server sends a 429 response with a Retry-After header.
- * - When there are errors in the underlying transport layer (e.g. DNS lookup failures).
- * - Or otherwise if the outgoing request fails, it will retry with an exponentially increasing delay.
- */
-function defaultRetryPolicy(options = {}) {
-    return defaultRetryPolicy$1(options);
-}
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-/**
- * A policy that encodes FormData on the request into the body.
- */
-function formDataPolicy() {
-    return formDataPolicy$1();
+function stringToUint8Array(value, format) {
+    return stringToUint8Array$1(value, format);
 }
 
 // Copyright (c) Microsoft Corporation.
@@ -39811,30 +42744,30 @@ class TracingContextImpl {
     }
 }
 
-var state$3 = {};
+var state$2 = {};
 
-var hasRequiredState$1;
+var hasRequiredState;
 
-function requireState$1 () {
-	if (hasRequiredState$1) return state$3;
-	hasRequiredState$1 = 1;
+function requireState () {
+	if (hasRequiredState) return state$2;
+	hasRequiredState = 1;
 	// Copyright (c) Microsoft Corporation.
 	// Licensed under the MIT License.
-	Object.defineProperty(state$3, "__esModule", { value: true });
-	state$3.state = void 0;
+	Object.defineProperty(state$2, "__esModule", { value: true });
+	state$2.state = void 0;
 	/**
 	 * @internal
 	 *
 	 * Holds the singleton instrumenter, to be shared across CJS and ESM imports.
 	 */
-	state$3.state = {
+	state$2.state = {
 	    instrumenterImplementation: undefined,
 	};
 	
-	return state$3;
+	return state$2;
 }
 
-var stateExports$1 = requireState$1();
+var stateExports = requireState();
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -39843,7 +42776,7 @@ var stateExports$1 = requireState$1();
 /**
  * Defines the shared state between CJS and ESM by re-exporting the CJS state.
  */
-const state$2 = stateExports$1.state;
+const state$1 = stateExports.state;
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -39892,10 +42825,10 @@ function createDefaultInstrumenter() {
  * @returns The currently set instrumenter
  */
 function getInstrumenter() {
-    if (!state$2.instrumenterImplementation) {
-        state$2.instrumenterImplementation = createDefaultInstrumenter();
+    if (!state$1.instrumenterImplementation) {
+        state$1.instrumenterImplementation = createDefaultInstrumenter();
     }
-    return state$2.instrumenterImplementation;
+    return state$1.instrumenterImplementation;
 }
 
 // Copyright (c) Microsoft Corporation.
@@ -40126,7 +43059,9 @@ function wrapAbortSignalLike(abortSignalLike) {
         return { abortSignal: abortSignalLike };
     }
     if (abortSignalLike.aborted) {
-        return { abortSignal: AbortSignal.abort(abortSignalLike.reason) };
+        return {
+            abortSignal: AbortSignal.abort("reason" in abortSignalLike ? abortSignalLike.reason : undefined),
+        };
     }
     const controller = new AbortController();
     let needsCleanup = true;
@@ -40137,7 +43072,7 @@ function wrapAbortSignalLike(abortSignalLike) {
         }
     }
     function listener() {
-        controller.abort(abortSignalLike.reason);
+        controller.abort("reason" in abortSignalLike ? abortSignalLike.reason : undefined);
         cleanup();
     }
     abortSignalLike.addEventListener("abort", listener);
@@ -40180,7 +43115,7 @@ function wrapAbortSignalLikePolicy() {
  */
 function createPipelineFromOptions(options) {
     const pipeline = createEmptyPipeline();
-    if (isNodeLike) {
+    {
         if (options.agent) {
             pipeline.addPolicy(agentPolicy(options.agent));
         }
@@ -40202,7 +43137,7 @@ function createPipelineFromOptions(options) {
     pipeline.addPolicy(tracingPolicy({ ...options.userAgentOptions, ...options.loggingOptions }), {
         afterPhase: "Retry",
     });
-    if (isNodeLike) {
+    {
         // Both XHR and Fetch expect to handle redirects automatically,
         // so only include this policy when we're in Node.
         pipeline.addPolicy(redirectPolicy(options.redirectOptions), { afterPhase: "Retry" });
@@ -40344,13 +43279,16 @@ function createTokenCycler(credential, tokenCyclerOptions) {
          * window and not already refreshing)
          */
         get shouldRefresh() {
+            if (token === null) {
+                return true;
+            }
             if (cycler.isRefreshing) {
                 return false;
             }
-            if (token?.refreshAfterTimestamp && token.refreshAfterTimestamp < Date.now()) {
+            if (token.refreshAfterTimestamp && token.refreshAfterTimestamp < Date.now()) {
                 return true;
             }
-            return (token?.expiresOnTimestamp ?? 0) - options.refreshWindowInMs < Date.now();
+            return token.expiresOnTimestamp - options.refreshWindowInMs < Date.now();
         },
         /**
          * Produces true if the cycler MUST refresh (null or nearly-expired
@@ -40577,7 +43515,7 @@ function bearerTokenAuthenticationPolicy(options) {
                     }
                     // If we get another CAE Claim, we will handle it by default and return whatever value we receive for this
                     if (isChallengeResponse(response)) {
-                        claims = getCaeChallengeClaims(response.headers.get("WWW-Authenticate"));
+                        claims = getCaeChallengeClaims(response.headers.get("WWW-Authenticate") ?? "");
                         if (claims) {
                             let parsedClaim;
                             try {
@@ -40700,18 +43638,12 @@ function pipelineContainsDisableKeepAlivePolicy(pipeline) {
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 /**
- * Encodes a string in base64 format.
- * @param value - the string to encode
- * @internal
- */
-/**
  * Encodes a byte array in base64 format.
- * @param value - the Uint8Aray to encode
+ * @param value - the Uint8Array to encode
  * @internal
  */
 function encodeByteArray(value) {
-    const bufferValue = value instanceof Buffer ? value : Buffer.from(value.buffer);
-    return bufferValue.toString("base64");
+    return uint8ArrayToString(value, "base64");
 }
 /**
  * Decodes a base64 string into a byte array.
@@ -40719,7 +43651,7 @@ function encodeByteArray(value) {
  * @internal
  */
 function decodeString(value) {
-    return Buffer.from(value, "base64");
+    return stringToUint8Array(value, "base64");
 }
 
 // Copyright (c) Microsoft Corporation.
@@ -41295,8 +44227,8 @@ function serializeSequenceType(serializer, mapper, object, objectName, isXml, op
     }
     let elementType = mapper.type.element;
     if (!elementType || typeof elementType !== "object") {
-        throw new Error(`element" metadata for an Array must be defined in the ` +
-            `mapper and it must of type "object" in ${objectName}.`);
+        throw new Error(`"element" metadata for an Array must be defined in the ` +
+            `mapper and it must be of type "object" in ${objectName}.`);
     }
     // Quirk: Composite mappers referenced by `element` might
     // not have *all* properties declared (like uberParent),
@@ -41475,10 +44407,15 @@ function serializeCompositeType(serializer, mapper, object, objectName, isXml, o
         const additionalPropertiesMapper = resolveAdditionalProperties(serializer, mapper, objectName);
         if (additionalPropertiesMapper) {
             const propNames = Object.keys(modelProps);
-            for (const clientPropName in object) {
+            for (const clientPropName of Object.keys(object)) {
                 const isAdditionalProperty = propNames.every((pn) => pn !== clientPropName);
                 if (isAdditionalProperty) {
-                    payload[clientPropName] = serializer.serialize(additionalPropertiesMapper, object[clientPropName], objectName + '["' + clientPropName + '"]', options);
+                    Object.defineProperty(payload, clientPropName, {
+                        value: serializer.serialize(additionalPropertiesMapper, object[clientPropName], objectName + '["' + clientPropName + '"]', options),
+                        enumerable: true,
+                        configurable: true,
+                        writable: true,
+                    });
                 }
             }
         }
@@ -41573,7 +44510,12 @@ function deserializeCompositeType(serializer, mapper, responseBody, objectName, 
                     */
                     const wrapped = responseBody[xmlName];
                     const elementList = wrapped?.[xmlElementName] ?? [];
-                    instance[key] = serializer.deserialize(propertyMapper, elementList, propertyObjectName, options);
+                    Object.defineProperty(instance, key, {
+                        value: serializer.deserialize(propertyMapper, elementList, propertyObjectName, options),
+                        enumerable: true,
+                        configurable: true,
+                        writable: true,
+                    });
                     handledPropertyNames.push(xmlName);
                 }
                 else {
@@ -41638,7 +44580,7 @@ function deserializeCompositeType(serializer, mapper, responseBody, objectName, 
     const additionalPropertiesMapper = mapper.type.additionalProperties;
     if (additionalPropertiesMapper) {
         const isAdditionalProperty = (responsePropName) => {
-            for (const clientPropName in modelProps) {
+            for (const clientPropName of Object.keys(modelProps)) {
                 const paths = splitSerializeName(modelProps[clientPropName].serializedName);
                 if (paths[0] === responsePropName) {
                     return false;
@@ -41646,9 +44588,15 @@ function deserializeCompositeType(serializer, mapper, responseBody, objectName, 
             }
             return true;
         };
-        for (const responsePropName in responseBody) {
+        for (const responsePropName of Object.keys(responseBody)) {
             if (isAdditionalProperty(responsePropName)) {
-                instance[responsePropName] = serializer.deserialize(additionalPropertiesMapper, responseBody[responsePropName], objectName + '["' + responsePropName + '"]', options);
+                const deserializedValue = serializer.deserialize(additionalPropertiesMapper, responseBody[responsePropName], objectName + '["' + responsePropName + '"]', options);
+                Object.defineProperty(instance, responsePropName, {
+                    value: deserializedValue,
+                    enumerable: true,
+                    configurable: true,
+                    writable: true,
+                });
             }
         }
     }
@@ -41657,7 +44605,12 @@ function deserializeCompositeType(serializer, mapper, responseBody, objectName, 
             if (instance[key] === undefined &&
                 !handledPropertyNames.includes(key) &&
                 !isSpecialXmlProperty(key, options)) {
-                instance[key] = responseBody[key];
+                Object.defineProperty(instance, key, {
+                    value: responseBody[key],
+                    enumerable: true,
+                    configurable: true,
+                    writable: true,
+                });
             }
         }
     }
@@ -41682,8 +44635,8 @@ function deserializeDictionaryType(serializer, mapper, responseBody, objectName,
 function deserializeSequenceType(serializer, mapper, responseBody, objectName, options) {
     let element = mapper.type.element;
     if (!element || typeof element !== "object") {
-        throw new Error(`element" metadata for an Array must be defined in the ` +
-            `mapper and it must of type "object" in ${objectName}`);
+        throw new Error(`"element" metadata for an Array must be defined in the ` +
+            `mapper and it must be of type "object" in ${objectName}`);
     }
     if (responseBody) {
         if (!Array.isArray(responseBody)) {
@@ -41779,28 +44732,28 @@ const MapperTypeNames = {
     UnixTime: "UnixTime",
 };
 
-var state$1 = {};
+var stateCjs = {};
 
-var hasRequiredState;
+var hasRequiredStateCjs;
 
-function requireState () {
-	if (hasRequiredState) return state$1;
-	hasRequiredState = 1;
+function requireStateCjs () {
+	if (hasRequiredStateCjs) return stateCjs;
+	hasRequiredStateCjs = 1;
 	// Copyright (c) Microsoft Corporation.
 	// Licensed under the MIT License.
-	Object.defineProperty(state$1, "__esModule", { value: true });
-	state$1.state = void 0;
+	Object.defineProperty(stateCjs, "__esModule", { value: true });
+	stateCjs.state = void 0;
 	/**
 	 * Holds the singleton operationRequestMap, to be shared across CJS and ESM imports.
 	 */
-	state$1.state = {
+	stateCjs.state = {
 	    operationRequestMap: new WeakMap(),
 	};
 	
-	return state$1;
+	return stateCjs;
 }
 
-var stateExports = requireState();
+var stateCjsExports = requireStateCjs();
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -41809,7 +44762,7 @@ var stateExports = requireState();
 /**
  * Defines the shared state between CJS and ESM by re-exporting the CJS state.
  */
-const state = stateExports.state;
+const state = stateCjsExports.state;
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
@@ -41852,9 +44805,8 @@ function getOperationArgumentValueFromParameter(operationArguments, parameter, f
         if (parameterMapper.required) {
             value = {};
         }
-        for (const propertyName in parameterPath) {
+        for (const [propertyName, propertyPath] of Object.entries(parameterPath)) {
             const propertyMapper = parameterMapper.type.modelProperties[propertyName];
-            const propertyPath = parameterPath[propertyName];
             const propertyValue = getOperationArgumentValueFromParameter(operationArguments, {
                 parameterPath: propertyPath,
                 mapper: propertyMapper,
@@ -41863,7 +44815,12 @@ function getOperationArgumentValueFromParameter(operationArguments, parameter, f
                 if (!value) {
                     value = {};
                 }
-                value[propertyName] = propertyValue;
+                Object.defineProperty(value, propertyName, {
+                    value: propertyValue,
+                    enumerable: true,
+                    configurable: true,
+                    writable: true,
+                });
             }
         }
     }
@@ -42138,8 +45095,7 @@ async function parse$1(jsonContentTypes, xmlContentTypes, operationResponse, opt
  */
 function getStreamingResponseStatusCodes(operationSpec) {
     const result = new Set();
-    for (const statusCode in operationSpec.responses) {
-        const operationResponse = operationSpec.responses[statusCode];
+    for (const [statusCode, operationResponse] of Object.entries(operationSpec.responses)) {
         if (operationResponse.bodyMapper &&
             operationResponse.bodyMapper.type.name === MapperTypeNames.Stream) {
             result.add(Number(statusCode));
@@ -42182,7 +45138,7 @@ function serializationPolicy(options = {}) {
     const stringifyXML = options.stringifyXML;
     return {
         name: serializationPolicyName,
-        async sendRequest(request, next) {
+        sendRequest(request, next) {
             const operationInfo = getOperationRequestInfo(request);
             const operationSpec = operationInfo?.operationSpec;
             const operationArguments = operationInfo?.operationArguments;
@@ -42439,7 +45395,8 @@ function appendPath(url, pathToAppend) {
     else {
         newPath = newPath + pathToAppend;
     }
-    parsedUrl.pathname = newPath;
+    // Use Object.assign to bypass react-native's incorrect readonly URL.pathname declaration
+    Object.assign(parsedUrl, { pathname: newPath });
     return parsedUrl.toString();
 }
 function calculateQueryParameters(operationSpec, operationArguments, fallbackObject) {
@@ -42638,7 +45595,7 @@ class ServiceClient {
     /**
      * Send the provided httpRequest.
      */
-    async sendRequest(request) {
+    sendRequest(request) {
         return this.pipeline.sendRequest(this._httpClient, request);
     }
     /**
@@ -42741,7 +45698,7 @@ function getCredentialScopes(options) {
     if (options.baseUri) {
         return `${options.baseUri}/.default`;
     }
-    if (options.credential && !options.credentialScopes) {
+    if (options.credential) {
         throw new Error(`When using credentials, the ServiceClientOptions must contain either a endpoint or a credentialScopes. Unable to create a bearerTokenAuthenticationPolicy`);
     }
     return undefined;
@@ -42818,8 +45775,7 @@ function buildScopes(challengeOptions, challengeInfo) {
         return challengeOptions.scopes;
     }
     const challengeScopes = new URL(challengeInfo.resource_id);
-    challengeScopes.pathname = Constants.DefaultScope;
-    let scope = challengeScopes.toString();
+    let scope = new URL(Constants.DefaultScope, challengeScopes.origin).toString();
     if (scope === "https://disk.azure.com/.default") {
         // the extra slash is required by the service
         scope = "https://disk.azure.com//.default";
@@ -43332,6 +46288,24 @@ function isExist(v) {
   return typeof v !== 'undefined';
 }
 
+/**
+ * Dangerous property names that could lead to prototype pollution or security issues
+ */
+const DANGEROUS_PROPERTY_NAMES = [
+  // '__proto__',
+  // 'constructor',
+  // 'prototype',
+  'hasOwnProperty',
+  'toString',
+  'valueOf',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__'
+];
+
+const criticalProperties = ["__proto__", "constructor", "prototype"];
+
 const defaultOptions$2 = {
   allowBooleanAttributes: false, //A tag can have attributes without any value
   unpairedTags: []
@@ -43749,6 +46723,619 @@ function getPositionFromMatch(match) {
   return match.startIndex + match[1].length;
 }
 
+// ---------------------------------------------------------------------------
+// Complete HTML5 named entity reference
+// Organized by logical categories for easy maintenance and selective importing
+// ---------------------------------------------------------------------------
+
+
+/**
+ * Currency Symbols
+ * @type {Record<string, string>}
+ */
+const CURRENCY = {
+  cent: '¢',
+  pound: '£',
+  curren: '¤',
+  yen: '¥',
+  euro: '€',
+  dollar: '$',
+  fnof: 'ƒ',
+  inr: '₹',
+  af: '؋',
+  birr: 'ብር',
+  peso: '₱',
+  rub: '₽',
+  won: '₩',
+  yuan: '¥',
+  cedil: '¸',
+};
+
+const XML = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  quot: "\""
+};
+const COMMON_HTML = {
+  nbsp: '\u00a0',
+  copy: '\u00a9',
+  reg: '\u00ae',
+  trade: '\u2122',
+  mdash: '\u2014',
+  ndash: '\u2013',
+  hellip: '\u2026',
+  laquo: '\u00ab',
+  raquo: '\u00bb',
+  lsquo: '\u2018',
+  rsquo: '\u2019',
+  ldquo: '\u201c',
+  rdquo: '\u201d',
+  bull: '\u2022',
+  para: '\u00b6',
+  sect: '\u00a7',
+  deg: '\u00b0',
+  frac12: '\u00bd',
+  frac14: '\u00bc',
+  frac34: '\u00be',
+};
+// ---------------------------------------------------------------------------
+// Note: NUMERIC_ENTITIES (&#NNN; / &#xHH;) are handled by the scanner directly
+// via String.fromCodePoint() without any map lookup.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Built-in named entity map  (name → replacement string)
+// No regex, no {regex,val} objects — just flat key/value pairs.
+// ---------------------------------------------------------------------------
+
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const SPECIAL_CHARS = new Set('!?\\\\/[]$%{}^&*()<>|+');
+
+/**
+ * Validate that an entity name contains no dangerous characters.
+ * @param {string} name
+ * @returns {string} the name, unchanged
+ * @throws {Error} on invalid characters
+ */
+function validateEntityName$1(name) {
+  if (name[0] === '#') {
+    throw new Error(`[EntityReplacer] Invalid character '#' in entity name: "${name}"`);
+  }
+  for (const ch of name) {
+    if (SPECIAL_CHARS.has(ch)) {
+      throw new Error(`[EntityReplacer] Invalid character '${ch}' in entity name: "${name}"`);
+    }
+  }
+  return name;
+}
+
+/**
+ * Merge one or more entity maps into a flat name→string map.
+ * Accepts either:
+ *   - plain string values:             { amp: '&' }
+ *   - legacy {regex,val} / {regx,val}: { lt: { regex: /.../, val: '<' } }
+ *
+ * Values containing '&' are skipped (recursive expansion risk).
+ *
+ * @param {...object} maps
+ * @returns {Record<string, string>}
+ */
+function mergeEntityMaps(...maps) {
+  const out = Object.create(null);
+  for (const map of maps) {
+    if (!map) continue;
+    for (const key of Object.keys(map)) {
+      const raw = map[key];
+      if (typeof raw === 'string') {
+        out[key] = raw;
+      } else if (raw && typeof raw === 'object' && raw.val !== undefined) {
+        // Legacy {regex,val} or {regx,val} — extract the string val only
+        const val = raw.val;
+        if (typeof val === 'string') {
+          out[key] = val;
+        }
+        // function vals are not supported in the scanner — skip
+      }
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// applyLimitsTo helpers
+// ---------------------------------------------------------------------------
+
+const LIMIT_TIER_EXTERNAL = 'external'; // input/runtime + persistent external maps
+const LIMIT_TIER_BASE = 'base';     // DEFAULT_XML_ENTITIES + namedEntities (system) maps
+const LIMIT_TIER_ALL = 'all';      // every entity regardless of tier
+
+/**
+ * Resolve `applyLimitsTo` option into a normalised Set of tier strings.
+ * Accepted values: 'external' | 'base' | 'all' | string[]
+ * Default: 'external' (only untrusted injected entities are counted).
+ * @param {string|string[]|undefined} raw
+ * @returns {Set<string>}
+ */
+function parseLimitTiers(raw) {
+  if (!raw || raw === LIMIT_TIER_EXTERNAL) return new Set([LIMIT_TIER_EXTERNAL]);
+  if (raw === LIMIT_TIER_ALL) return new Set([LIMIT_TIER_ALL]);
+  if (raw === LIMIT_TIER_BASE) return new Set([LIMIT_TIER_BASE]);
+  if (Array.isArray(raw)) return new Set(raw);
+  return new Set([LIMIT_TIER_EXTERNAL]); // safe default for unrecognised values
+}
+
+// ---------------------------------------------------------------------------
+// NCR (Numeric Character Reference) classification
+// ---------------------------------------------------------------------------
+
+// Severity order — higher number = stricter action.
+// Used to enforce minimum action levels for specific codepoint ranges.
+const NCR_LEVEL = Object.freeze({ allow: 0, leave: 1, remove: 2, throw: 3 });
+
+// XML 1.0 §2.2: allowed chars are #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+// Restricted C0: U+0001–U+001F excluding U+0009, U+000A, U+000D
+const XML10_ALLOWED_C0 = new Set([0x09, 0x0A, 0x0D]);
+
+/**
+ * Parse the `ncr` constructor option into flat, hot-path-friendly fields.
+ * @param {object|undefined} ncr
+ * @returns {{ xmlVersion: number, onLevel: number, nullLevel: number }}
+ */
+function parseNCRConfig(ncr) {
+  if (!ncr) {
+    return { xmlVersion: 1.0, onLevel: NCR_LEVEL.allow, nullLevel: NCR_LEVEL.remove };
+  }
+  const xmlVersion = ncr.xmlVersion === 1.1 ? 1.1 : 1.0;
+  const onLevel = NCR_LEVEL[ncr.onNCR] ?? NCR_LEVEL.allow;
+  const nullLevel = NCR_LEVEL[ncr.nullNCR] ?? NCR_LEVEL.remove;
+  // 'allow' is not meaningful for null — clamp to at least 'remove'
+  const clampedNull = Math.max(nullLevel, NCR_LEVEL.remove);
+  return { xmlVersion, onLevel, nullLevel: clampedNull };
+}
+
+// ---------------------------------------------------------------------------
+// EntityReplacer
+// ---------------------------------------------------------------------------
+
+/**
+ * Single-pass, zero-regex entity replacer for XML/HTML content.
+ *
+ * Algorithm: scan the string once for '&', read to ';', resolve via map
+ * or direct codepoint conversion, build output chunks, join once at the end.
+ *
+ * Entity lookup priority (highest → lowest):
+ *   1. input / runtime  (DOCTYPE entities for current document)
+ *   2. persistent external (survive across documents)
+ *   3. base named map   (DEFAULT_XML_ENTITIES + user-supplied namedEntities)
+ *
+ * Both input and external resolve as the 'external' tier for limit purposes.
+ * Base map entities resolve as the 'base' tier.
+ *
+ * Numeric / hex references (&#NNN; / &#xHH;) are resolved directly via
+ * String.fromCodePoint() — no map needed. They count as 'base' tier.
+ *
+ * @example
+ * const replacer = new EntityReplacer({ namedEntities: COMMON_HTML });
+ * replacer.setExternalEntities({ brand: 'Acme' });
+ *
+ * const instance = replacer.reset();
+ * instance.addInputEntities({ version: '1.0' });
+ * instance.encode('&brand; v&version; &lt;'); // 'Acme v1.0 <'
+ */
+class EntityDecoder {
+  /**
+   * @param {object} [options]
+   * @param {object|null}  [options.namedEntities]        — extra named entities merged into base map
+   * @param {object}  [options.limit]                 — security limits
+   * @param {number}       [options.limit.maxTotalExpansions=0]  — 0 = unlimited
+   * @param {number}       [options.limit.maxExpandedLength=0]   — 0 = unlimited
+   * @param {'external'|'base'|'all'|string[]} [options.limit.applyLimitsTo='external']
+   *   Which entity tiers count against the security limits:
+   *   - 'external' (default) — only input/runtime + persistent external entities
+   *   - 'base'               — only DEFAULT_XML_ENTITIES + namedEntities
+   *   - 'all'                — every entity regardless of tier
+   *   - string[]             — explicit combination, e.g. ['external', 'base']
+   * @param {((resolved: string, original: string) => string)|null} [options.postCheck=null]
+   * @param {string[]} [options.remove=[]] — entity names (e.g. ['nbsp', '#13']) to delete (replace with empty string)
+   * @param {string[]} [options.leave=[]]  — entity names to keep as literal (unchanged in output)
+   * @param {object}   [options.ncr]       — Numeric Character Reference controls
+   * @param {1.0|1.1}  [options.ncr.xmlVersion=1.0]
+   *   XML version governing which codepoint ranges are restricted:
+   *   - 1.0 — C0 controls U+0001–U+001F (except U+0009/000A/000D) are prohibited
+   *   - 1.1 — C0 controls are allowed when written as NCRs; C1 (U+007F–U+009F) decoded as-is
+   * @param {'allow'|'leave'|'remove'|'throw'} [options.ncr.onNCR='allow']
+   *   Base action for numeric references. Severity order: allow < leave < remove < throw.
+   *   For codepoint ranges that carry a minimum level (surrogates → remove, XML 1.0 C0 → remove),
+   *   the effective action is max(onNCR, rangeMinimum).
+   * @param {'remove'|'throw'} [options.ncr.nullNCR='remove']
+   *   Action for U+0000 (null). 'allow' and 'leave' are clamped to 'remove' since null is never safe.
+   */
+  constructor(options = {}) {
+    this._limit = options.limit || {};
+    this._maxTotalExpansions = this._limit.maxTotalExpansions || 0;
+    this._maxExpandedLength = this._limit.maxExpandedLength || 0;
+    this._postCheck = typeof options.postCheck === 'function' ? options.postCheck : r => r;
+    this._limitTiers = parseLimitTiers(this._limit.applyLimitsTo ?? LIMIT_TIER_EXTERNAL);
+    this._numericAllowed = options.numericAllowed ?? true;
+    // Base map: DEFAULT_XML_ENTITIES + user-supplied extras. Immutable after construction.
+    this._baseMap = mergeEntityMaps(XML, options.namedEntities || null);
+
+    // Persistent external entities — survive across documents.
+    // Stored as a separate map so reset() never touches them.
+    /** @type {Record<string, string>} */
+    this._externalMap = Object.create(null);
+
+    // Input / runtime entities — current document only, wiped on reset().
+    /** @type {Record<string, string>} */
+    this._inputMap = Object.create(null);
+
+    // Per-document counters
+    this._totalExpansions = 0;
+    this._expandedLength = 0;
+
+    // --- New: remove / leave sets ---
+    /** @type {Set<string>} */
+    this._removeSet = new Set(options.remove && Array.isArray(options.remove) ? options.remove : []);
+    /** @type {Set<string>} */
+    this._leaveSet = new Set(options.leave && Array.isArray(options.leave) ? options.leave : []);
+
+    // --- NCR config (parsed into flat fields for hot-path speed) ---
+    const ncrCfg = parseNCRConfig(options.ncr);
+    this._ncrXmlVersion = ncrCfg.xmlVersion;
+    this._ncrOnLevel = ncrCfg.onLevel;
+    this._ncrNullLevel = ncrCfg.nullLevel;
+  }
+
+  // -------------------------------------------------------------------------
+  // Persistent external entity registration
+  // -------------------------------------------------------------------------
+
+  /**
+   * Replace the full set of persistent external entities.
+   * All keys are validated — throws on invalid characters.
+   * @param {Record<string, string | { regex?: RegExp, val: string }>} map
+   */
+  setExternalEntities(map) {
+    if (map) {
+      for (const key of Object.keys(map)) {
+        validateEntityName$1(key);
+      }
+    }
+    this._externalMap = mergeEntityMaps(map);
+  }
+
+  /**
+   * Add a single persistent external entity.
+   * @param {string} key
+   * @param {string} value
+   */
+  addExternalEntity(key, value) {
+    validateEntityName$1(key);
+    if (typeof value === 'string' && value.indexOf('&') === -1) {
+      this._externalMap[key] = value;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Input / runtime entity registration (per document)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Inject DOCTYPE entities for the current document.
+   * Also resets per-document expansion counters.
+   * @param {Record<string, string | { regx?: RegExp, regex?: RegExp, val: string }>} map
+   */
+  addInputEntities(map) {
+    this._totalExpansions = 0;
+    this._expandedLength = 0;
+    this._inputMap = mergeEntityMaps(map);
+  }
+
+  // -------------------------------------------------------------------------
+  // Per-document reset
+  // -------------------------------------------------------------------------
+
+  /**
+   * Wipe input/runtime entities and reset counters.
+   * Call this before processing each new document.
+   * @returns {this}
+   */
+  reset() {
+    this._inputMap = Object.create(null);
+    this._totalExpansions = 0;
+    this._expandedLength = 0;
+    return this;
+  }
+
+  // -------------------------------------------------------------------------
+  // XML version (can be set after construction, e.g. once parser reads <?xml?>)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Update the XML version used for NCR classification.
+   * Call this as soon as the document's `<?xml version="...">` declaration is parsed.
+   * @param {1.0|1.1|number} version
+   */
+  setXmlVersion(version) {
+    this._ncrXmlVersion = version === 1.1 ? 1.1 : 1.0;
+  }
+
+  // -------------------------------------------------------------------------
+  // Primary API
+  // -------------------------------------------------------------------------
+
+  /**
+   * Replace all entity references in `str` in a single pass.
+   *
+   * @param {string} str
+   * @returns {string}
+   */
+  decode(str) {
+    if (typeof str !== 'string' || str.length === 0) return str;
+    //TODO: check if needed
+    if (str.indexOf('&') === -1) return str; // fast path — no entities at all
+
+    const original = str;
+    const chunks = [];
+    const len = str.length;
+    let last = 0; // start of next unprocessed literal chunk
+    let i = 0;
+
+    const limitExpansions = this._maxTotalExpansions > 0;
+    const limitLength = this._maxExpandedLength > 0;
+    const checkLimits = limitExpansions || limitLength;
+
+    while (i < len) {
+      // Scan forward to next '&'
+      if (str.charCodeAt(i) !== 38 /* '&' */) { i++; continue; }
+
+      // --- Found '&' at position i ---
+
+      // Scan forward to ';'
+      let j = i + 1;
+      while (j < len && str.charCodeAt(j) !== 59 /* ';' */ && (j - i) <= 32) j++;
+
+      if (j >= len || str.charCodeAt(j) !== 59) {
+        // No closing ';' within window — treat '&' as literal
+        i++;
+        continue;
+      }
+
+      // Raw token between '&' and ';' (exclusive)
+      const token = str.slice(i + 1, j);
+      if (token.length === 0) { i++; continue; }
+
+      let replacement;
+      let tier; // which limit tier this entity belongs to
+
+      if (this._removeSet.has(token)) {
+        // Remove entity: replace with empty string
+        replacement = '';
+        // If entity was unknown (replacement undefined), we still need a tier for limits.
+        // Treat as external tier because it's user-directed removal of an unknown reference.
+        if (tier === undefined) {
+          tier = LIMIT_TIER_EXTERNAL;
+        }
+      } else if (this._leaveSet.has(token)) {
+        // Do not replace — keep original &token; as literal
+        i++;
+        continue;
+      } else if (token.charCodeAt(0) === 35 /* '#' */) {
+        // ---- Numeric / NCR reference ----
+        // NCR classification always runs first — prohibited codepoints must be
+        // caught regardless of numericAllowed.
+        const ncrResult = this._resolveNCR(token);
+        if (ncrResult === undefined) {
+          // 'leave' action — keep original &token; as-is
+          i++;
+          continue;
+        }
+        replacement = ncrResult; // '' for remove, char string for allow
+        tier = LIMIT_TIER_BASE;
+      } else {
+        // ---- Named reference ----
+        const resolved = this._resolveName(token);
+        replacement = resolved?.value;
+        tier = resolved?.tier;
+      }
+
+      if (replacement === undefined) {
+        // Unknown entity — leave as-is, advance past '&' only
+        i++;
+        continue;
+      }
+
+      // Flush literal chunk before this entity
+      if (i > last) chunks.push(str.slice(last, i));
+      chunks.push(replacement);
+      last = j + 1; // skip past ';'
+      i = last;
+
+      // Apply expansion limits only if this tier is being tracked
+      if (checkLimits && this._tierCounts(tier)) {
+        if (limitExpansions) {
+          this._totalExpansions++;
+          if (this._totalExpansions > this._maxTotalExpansions) {
+            throw new Error(
+              `[EntityReplacer] Entity expansion count limit exceeded: ` +
+              `${this._totalExpansions} > ${this._maxTotalExpansions}`
+            );
+          }
+        }
+        if (limitLength) {
+          // delta: replacement.length minus the raw &token; length (token.length + 2 for '&' and ';')
+          const delta = replacement.length - (token.length + 2);
+          if (delta > 0) {
+            this._expandedLength += delta;
+            if (this._expandedLength > this._maxExpandedLength) {
+              throw new Error(
+                `[EntityReplacer] Expanded content length limit exceeded: ` +
+                `${this._expandedLength} > ${this._maxExpandedLength}`
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // Flush trailing literal
+    if (last < len) chunks.push(str.slice(last));
+
+    // If nothing was replaced, chunks is empty — return original
+    const result = chunks.length === 0 ? str : chunks.join('');
+
+    return this._postCheck(result, original);
+  }
+
+  // -------------------------------------------------------------------------
+  // Private: limit tier check
+  // -------------------------------------------------------------------------
+
+  /**
+   * Returns true if a resolved entity of the given tier should count
+   * against the expansion/length limits.
+   * @param {string} tier  — LIMIT_TIER_EXTERNAL | LIMIT_TIER_BASE
+   * @returns {boolean}
+   */
+  _tierCounts(tier) {
+    if (this._limitTiers.has(LIMIT_TIER_ALL)) return true;
+    return this._limitTiers.has(tier);
+  }
+
+  // -------------------------------------------------------------------------
+  // Private: entity resolution
+  // -------------------------------------------------------------------------
+
+  /**
+   * Resolve a named entity token (without & and ;).
+   * Priority: inputMap > externalMap > baseMap
+   * Returns the resolved value tagged with its limit tier.
+   *
+   * @param {string} name
+   * @returns {{ value: string, tier: string }|undefined}
+   */
+  _resolveName(name) {
+    // input and external both count as 'external' tier for limit purposes —
+    // they are injected at runtime and are the untrusted surface.
+    if (name in this._inputMap) return { value: this._inputMap[name], tier: LIMIT_TIER_EXTERNAL };
+    if (name in this._externalMap) return { value: this._externalMap[name], tier: LIMIT_TIER_EXTERNAL };
+    if (name in this._baseMap) return { value: this._baseMap[name], tier: LIMIT_TIER_BASE };
+    return undefined;
+  }
+
+  /**
+   * Classify a codepoint and return the minimum action level that must be applied.
+   * Returns -1 when no minimum is imposed (normal allow path).
+   *
+   * Ranges checked (in priority order):
+   *   1. U+0000            — null, governed by nullNCR (always ≥ remove)
+   *   2. U+D800–U+DFFF     — surrogates, always prohibited (min: remove)
+   *   3. U+0001–U+001F \ {0x09,0x0A,0x0D}  — XML 1.0 restricted C0 (min: remove)
+   *      (skipped in XML 1.1 — C0 controls are allowed when written as NCRs)
+   *
+   * @param {number} cp  — codepoint
+   * @returns {number}   — minimum NCR_LEVEL value, or -1 for no restriction
+   */
+  _classifyNCR(cp) {
+    // 1. Null
+    if (cp === 0) return this._ncrNullLevel;
+
+    // 2. Surrogates — always prohibited, minimum 'remove'
+    if (cp >= 0xD800 && cp <= 0xDFFF) return NCR_LEVEL.remove;
+
+    // 3. XML 1.0 restricted C0 controls
+    if (this._ncrXmlVersion === 1.0) {
+      if (cp >= 0x01 && cp <= 0x1F && !XML10_ALLOWED_C0.has(cp)) return NCR_LEVEL.remove;
+    }
+
+    return -1; // no restriction
+  }
+
+  /**
+   * Execute a resolved NCR action.
+   *
+   * @param {number} action   — NCR_LEVEL value
+   * @param {string} token    — raw token (e.g. '#38') for error messages
+   * @param {number} cp       — codepoint, used only for error messages
+   * @returns {string|undefined}
+   *   - decoded character string  → 'allow'
+   *   - ''                        → 'remove'
+   *   - undefined                 → 'leave' (caller must skip past '&' only)
+   *   - throws Error              → 'throw'
+   */
+  _applyNCRAction(action, token, cp) {
+    switch (action) {
+      case NCR_LEVEL.allow: return String.fromCodePoint(cp);
+      case NCR_LEVEL.remove: return '';
+      case NCR_LEVEL.leave: return undefined; // signal: keep literal
+      case NCR_LEVEL.throw:
+        throw new Error(
+          `[EntityDecoder] Prohibited numeric character reference ` +
+          `&${token}; (U+${cp.toString(16).toUpperCase().padStart(4, '0')})`
+        );
+      default: return String.fromCodePoint(cp);
+    }
+  }
+
+  /**
+   * Full NCR resolution pipeline for a numeric token.
+   *
+   * Steps:
+   *   1. Parse the codepoint (decimal or hex).
+   *   2. Validate the raw codepoint range (NaN, <0, >0x10FFFF).
+   *   3. If numericAllowed is false and no minimum restriction applies → leave as-is.
+   *   4. Classify the codepoint to find the minimum required action level.
+   *   5. Resolve effective action = max(onNCR, minimum).
+   *   6. Apply and return.
+   *
+   * @param {string} token  — e.g. '#38', '#x26', '#X26'
+   * @returns {string|undefined}
+   *   - string (incl. '')  — replacement ('' = remove)
+   *   - undefined          — leave original &token; as-is
+   */
+  _resolveNCR(token) {
+    // Step 1: parse codepoint
+    const second = token.charCodeAt(1);
+    let cp;
+    if (second === 120 /* x */ || second === 88 /* X */) {
+      cp = parseInt(token.slice(2), 16);
+    } else {
+      cp = parseInt(token.slice(1), 10);
+    }
+
+    // Step 2: out-of-range → leave as-is unconditionally
+    if (Number.isNaN(cp) || cp < 0 || cp > 0x10FFFF) return undefined;
+
+    // Step 3: classify to get minimum action level
+    const minimum = this._classifyNCR(cp);
+
+    // Step 4: if numericAllowed is false and no hard minimum → leave
+    if (!this._numericAllowed && minimum < NCR_LEVEL.remove) return undefined;
+
+    // Step 5: effective action = max(configured onNCR, range minimum)
+    const effective = minimum === -1
+      ? this._ncrOnLevel
+      : Math.max(this._ncrOnLevel, minimum);
+
+    // Step 6: apply
+    return this._applyNCRAction(effective, token, cp);
+  }
+}
+
+const defaultOnDangerousProperty = (name) => {
+  if (DANGEROUS_PROPERTY_NAMES.includes(name)) {
+    return "__" + name;
+  }
+  return name;
+};
+
+
 const defaultOptions$1 = {
   preserveOrder: false,
   attributeNamePrefix: '@_',
@@ -43780,6 +47367,7 @@ const defaultOptions$1 = {
   unpairedTags: [],
   processEntities: true,
   htmlEntities: false,
+  entityDecoder: null,
   ignoreDeclaration: false,
   ignorePiTags: false,
   transformTagName: false,
@@ -43791,37 +47379,69 @@ const defaultOptions$1 = {
   captureMetaData: false,
   maxNestedTags: 100,
   strictReservedNames: true,
+  jPath: true, // if true, pass jPath string to callbacks; if false, pass matcher instance
+  onDangerousProperty: defaultOnDangerousProperty
 };
+
+
+/**
+ * Validates that a property name is safe to use
+ * @param {string} propertyName - The property name to validate
+ * @param {string} optionName - The option field name (for error message)
+ * @throws {Error} If property name is dangerous
+ */
+function validatePropertyName(propertyName, optionName) {
+  if (typeof propertyName !== 'string') {
+    return; // Only validate string property names
+  }
+
+  const normalized = propertyName.toLowerCase();
+  if (DANGEROUS_PROPERTY_NAMES.some(dangerous => normalized === dangerous.toLowerCase())) {
+    throw new Error(
+      `[SECURITY] Invalid ${optionName}: "${propertyName}" is a reserved JavaScript keyword that could cause prototype pollution`
+    );
+  }
+
+  if (criticalProperties.some(dangerous => normalized === dangerous.toLowerCase())) {
+    throw new Error(
+      `[SECURITY] Invalid ${optionName}: "${propertyName}" is a reserved JavaScript keyword that could cause prototype pollution`
+    );
+  }
+}
 
 /**
  * Normalizes processEntities option for backward compatibility
  * @param {boolean|object} value 
  * @returns {object} Always returns normalized object
  */
-function normalizeProcessEntities(value) {
+function normalizeProcessEntities(value, htmlEntities) {
   // Boolean backward compatibility
   if (typeof value === 'boolean') {
     return {
       enabled: value, // true or false
       maxEntitySize: 10000,
-      maxExpansionDepth: 10,
-      maxTotalExpansions: 1000,
+      maxExpansionDepth: 10000,
+      maxTotalExpansions: Infinity,
       maxExpandedLength: 100000,
+      maxEntityCount: 1000,
       allowedTags: null,
-      tagFilter: null
+      tagFilter: null,
+      appliesTo: "all",
     };
   }
 
   // Object config - merge with defaults
   if (typeof value === 'object' && value !== null) {
     return {
-      enabled: value.enabled !== false, // default true if not specified
-      maxEntitySize: value.maxEntitySize ?? 10000,
-      maxExpansionDepth: value.maxExpansionDepth ?? 10,
-      maxTotalExpansions: value.maxTotalExpansions ?? 1000,
-      maxExpandedLength: value.maxExpandedLength ?? 100000,
+      enabled: value.enabled !== false,
+      maxEntitySize: Math.max(1, value.maxEntitySize ?? 10000),
+      maxExpansionDepth: Math.max(1, value.maxExpansionDepth ?? 10000),
+      maxTotalExpansions: Math.max(1, value.maxTotalExpansions ?? Infinity),
+      maxExpandedLength: Math.max(1, value.maxExpandedLength ?? 100000),
+      maxEntityCount: Math.max(1, value.maxEntityCount ?? 1000),
       allowedTags: value.allowedTags ?? null,
-      tagFilter: value.tagFilter ?? null
+      tagFilter: value.tagFilter ?? null,
+      appliesTo: value.appliesTo ?? "all",
     };
   }
 
@@ -43832,8 +47452,39 @@ function normalizeProcessEntities(value) {
 const buildOptions = function (options) {
   const built = Object.assign({}, defaultOptions$1, options);
 
+  // Validate property names to prevent prototype pollution
+  const propertyNameOptions = [
+    { value: built.attributeNamePrefix, name: 'attributeNamePrefix' },
+    { value: built.attributesGroupName, name: 'attributesGroupName' },
+    { value: built.textNodeName, name: 'textNodeName' },
+    { value: built.cdataPropName, name: 'cdataPropName' },
+    { value: built.commentPropName, name: 'commentPropName' }
+  ];
+
+  for (const { value, name } of propertyNameOptions) {
+    if (value) {
+      validatePropertyName(value, name);
+    }
+  }
+
+  if (built.onDangerousProperty === null) {
+    built.onDangerousProperty = defaultOnDangerousProperty;
+  }
+
   // Always normalize processEntities for backward compatibility and validation
-  built.processEntities = normalizeProcessEntities(built.processEntities);
+  built.processEntities = normalizeProcessEntities(built.processEntities, built.htmlEntities);
+  built.unpairedTagsSet = new Set(built.unpairedTags);
+  // Convert old-style stopNodes for backward compatibility
+  if (built.stopNodes && Array.isArray(built.stopNodes)) {
+    built.stopNodes = built.stopNodes.map(node => {
+      if (typeof node === 'string' && node.startsWith('*.')) {
+        // Old syntax: *.tagname meant "tagname anywhere"
+        // Convert to new syntax: ..tagname
+        return '..' + node.substring(2);
+      }
+      return node;
+    });
+  }
   //console.debug(built.processEntities)
   return built;
 };
@@ -43877,15 +47528,143 @@ class XmlNode {
   }
 }
 
+/**
+ * xml-naming
+ * Validates XML Name productions as defined in the XML 1.0 and 1.1 specifications.
+ * Covers: Name, NCName, QName, NMToken, NMTokens
+ *
+ * XML 1.0 spec: https://www.w3.org/TR/xml/#NT-Name
+ * XML 1.1 spec: https://www.w3.org/TR/xml11/#NT-NameStartChar
+ * XML NS spec:  https://www.w3.org/TR/xml-names/#NT-NCName
+ */
+
+// ---------------------------------------------------------------------------
+// Character class strings — XML 1.0
+//
+// NameStartChar ::= ":" | [A-Z] | "_" | [a-z]
+//   | [#xC0-#xD6]   | [#xD8-#xF6]   | [#xF8-#x2FF]
+//   | [#x370-#x37D] | [#x37F-#x1FFF]    <- split to exclude #x0487
+//   | [#x200C-#x200D]
+//   | [#x2070-#x218F] | [#x2C00-#x2FEF]
+//   | [#x3001-#xD7FF] | [#xF900-#xFDCF] | [#xFDF0-#xFFFD]
+//
+// NameChar ::= NameStartChar | "-" | "." | [0-9]
+//   | #xB7 | [#x0300-#x036F] | [#x203F-#x2040]
+//
+// Note: \u0487 (Combining Cyrillic Millions Sign) was added in Unicode 4.0,
+// after XML 1.0 was defined against Unicode 2.0. It falls inside the range
+// \u037F-\u1FFF but must be excluded. We split that range into
+// \u037F-\u0486 and \u0488-\u1FFF to exclude it explicitly.
+// ---------------------------------------------------------------------------
+
+const nameStartChar10 =
+  ':A-Za-z_' +
+  '\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF' +
+  '\u0370-\u037D' +
+  '\u037F-\u0486\u0488-\u1FFF' +  // split to exclude \u0487
+  '\u200C-\u200D' +
+  '\u2070-\u218F' +
+  '\u2C00-\u2FEF' +
+  '\u3001-\uD7FF' +
+  '\uF900-\uFDCF' +
+  '\uFDF0-\uFFFD';
+
+const nameChar10 =
+  nameStartChar10 +
+  '\\-\\.\\d' +
+  '\u00B7' +
+  '\u0300-\u036F' +
+  '\u203F-\u2040';
+
+// ---------------------------------------------------------------------------
+// Character class strings — XML 1.1
+//
+// Differences from XML 1.0:
+//
+// NameStartChar:
+//   1.0 has split ranges: \u00C0-\u00D6, \u00D8-\u00F6, \u00F8-\u02FF
+//   1.1 merges them into: \u00C0-\u02FF
+//   (\u00D7 x and \u00F7 / are division symbols, excluded in both versions)
+//
+//   1.0 tops out at \uFFFD (BMP only)
+//   1.1 adds \u{10000}-\u{EFFFF} (supplementary planes)
+//   These require the /u flag on the RegExp — see buildRegexes below.
+//
+// NameChar:
+//   1.1 adds \u0487 (Combining Cyrillic Millions Sign, added in Unicode 4.0)
+// ---------------------------------------------------------------------------
+
+const nameStartChar11 =
+  ':A-Za-z_' +
+  '\u00C0-\u02FF' +                    // merged — 1.0 had three split ranges here
+  '\u0370-\u037D' +
+  '\u037F-\u0486\u0488-\u1FFF' +       // split to exclude \u0487 (combining mark, never a NameStartChar)
+  '\u200C-\u200D' +
+  '\u2070-\u218F' +
+  '\u2C00-\u2FEF' +
+  '\u3001-\uD7FF' +
+  '\uF900-\uFDCF' +
+  '\uFDF0-\uFFFD' +
+  '\u{10000}-\u{EFFFF}';     // supplementary planes — REQUIRES /u flag on RegExp
+
+const nameChar11 =
+  nameStartChar11 +
+  '\\-\\.\\d' +
+  '\u00B7' +
+  '\u0300-\u036F' +
+  '\u0487' +                 // Combining Cyrillic Millions Sign — valid in 1.1, not 1.0
+  '\u203F-\u2040';
+
+// ---------------------------------------------------------------------------
+// Regex builders
+//
+// XML 1.0 regexes: no flags — BMP only, standard JS regex behaviour.
+// XML 1.1 regexes: /u flag — required for \u{10000}-\u{EFFFF} to match actual
+//   supplementary code points rather than lone surrogates (which are illegal XML).
+// ---------------------------------------------------------------------------
+
+const buildRegexes = (startChar, char, flags = '') => {
+  const ncStart = startChar.replace(':', '');
+  const ncChar = char.replace(':', '');
+  const ncNamePat = `[${ncStart}][${ncChar}]*`;
+
+  return {
+    name: new RegExp(`^[${startChar}][${char}]*$`, flags),
+    ncName: new RegExp(`^${ncNamePat}$`, flags),
+    qName: new RegExp(`^${ncNamePat}(?::${ncNamePat})?$`, flags),
+    nmToken: new RegExp(`^[${char}]+$`, flags),
+    nmTokens: new RegExp(`^[${char}]+(?:\\s+[${char}]+)*$`, flags),
+  };
+};
+
+const regexes10 = buildRegexes(nameStartChar10, nameChar10);       // no /u — BMP only
+const regexes11 = buildRegexes(nameStartChar11, nameChar11, 'u');  // /u — enables \u{10000}-\u{EFFFF}
+
+const getRegexes = (xmlVersion = '1.0') =>
+  xmlVersion === '1.1' ? regexes11 : regexes10;
+
+/**
+ * Returns true if the string is a valid QName (Qualified Name).
+ * Allows exactly one colon as a prefix separator: prefix:localName.
+ * Used for: element and attribute names in namespace-aware XML/SVG.
+ */
+const qName = (str, { xmlVersion = '1.0' } = {}) =>
+  getRegexes(xmlVersion).qName.test(str);
+
 class DocTypeReader {
-    constructor(options) {
+    constructor(options, xmlVersion) {
         this.suppressValidationErr = !options;
         this.options = options;
+        this.xmlVersion = xmlVersion || 1.0;
     }
 
+    setXmlVersion(xmlVersion = 1.0) {
+        this.xmlVersion = xmlVersion;
+    }
     readDocType(xmlData, i) {
-
         const entities = Object.create(null);
+        let entityCount = 0;
+
         if (xmlData[i + 3] === 'O' &&
             xmlData[i + 4] === 'C' &&
             xmlData[i + 5] === 'T' &&
@@ -43903,11 +47682,17 @@ class DocTypeReader {
                         let entityName, val;
                         [entityName, val, i] = this.readEntityExp(xmlData, i + 1, this.suppressValidationErr);
                         if (val.indexOf("&") === -1) { //Parameter entities are not supported
-                            const escaped = entityName.replace(/[.\-+*:]/g, '\\.');
-                            entities[entityName] = {
-                                regx: RegExp(`&${escaped};`, "g"),
-                                val: val
-                            };
+                            if (this.options.enabled !== false &&
+                                this.options.maxEntityCount != null &&
+                                entityCount >= this.options.maxEntityCount) {
+                                throw new Error(
+                                    `Entity count (${entityCount + 1}) exceeds maximum allowed (${this.options.maxEntityCount})`
+                                );
+                            }
+                            //const escaped = entityName.replace(/[.\-+*:]/g, '\\.');
+                            //const escaped = entityName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            entities[entityName] = val;
+                            entityCount++;
                         }
                     }
                     else if (hasBody && hasSeq(xmlData, "!ELEMENT", i)) {
@@ -43967,12 +47752,13 @@ class DocTypeReader {
         i = skipWhitespace(xmlData, i);
 
         // Read entity name
-        let entityName = "";
+        const startIndex = i;
         while (i < xmlData.length && !/\s/.test(xmlData[i]) && xmlData[i] !== '"' && xmlData[i] !== "'") {
-            entityName += xmlData[i];
             i++;
         }
-        validateEntityName(entityName);
+        let entityName = xmlData.substring(startIndex, i);
+
+        validateEntityName(entityName, { xmlVersion: this.xmlVersion });
 
         // Skip whitespace after entity name
         i = skipWhitespace(xmlData, i);
@@ -43992,7 +47778,7 @@ class DocTypeReader {
 
         // Validate entity size
         if (this.options.enabled !== false &&
-            this.options.maxEntitySize &&
+            this.options.maxEntitySize != null &&
             entityValue.length > this.options.maxEntitySize) {
             throw new Error(
                 `Entity "${entityName}" size (${entityValue.length}) exceeds maximum allowed size (${this.options.maxEntitySize})`
@@ -44008,12 +47794,14 @@ class DocTypeReader {
         i = skipWhitespace(xmlData, i);
 
         // Read notation name
-        let notationName = "";
+
+        const startIndex = i;
         while (i < xmlData.length && !/\s/.test(xmlData[i])) {
-            notationName += xmlData[i];
             i++;
         }
-        !this.suppressValidationErr && validateEntityName(notationName);
+        let notationName = xmlData.substring(startIndex, i);
+
+        !this.suppressValidationErr && validateEntityName(notationName, { xmlVersion: this.xmlVersion });
 
         // Skip whitespace after notation name
         i = skipWhitespace(xmlData, i);
@@ -44062,10 +47850,11 @@ class DocTypeReader {
         }
         i++;
 
+        const startIndex = i;
         while (i < xmlData.length && xmlData[i] !== startChar) {
-            identifierVal += xmlData[i];
             i++;
         }
+        identifierVal = xmlData.substring(startIndex, i);
 
         if (xmlData[i] !== startChar) {
             throw new Error(`Unterminated ${type} value`);
@@ -44085,14 +47874,14 @@ class DocTypeReader {
         i = skipWhitespace(xmlData, i);
 
         // Read element name
-        let elementName = "";
+        const startIndex = i;
         while (i < xmlData.length && !/\s/.test(xmlData[i])) {
-            elementName += xmlData[i];
             i++;
         }
+        let elementName = xmlData.substring(startIndex, i);
 
         // Validate element name
-        if (!this.suppressValidationErr && !isName(elementName)) {
+        if (!this.suppressValidationErr && !qName(elementName, { xmlVersion: this.xmlVersion })) {
             throw new Error(`Invalid element name: "${elementName}"`);
         }
 
@@ -44106,10 +47895,12 @@ class DocTypeReader {
             i++; // Move past '('
 
             // Read content model
+            const startIndex = i;
             while (i < xmlData.length && xmlData[i] !== ")") {
-                contentModel += xmlData[i];
                 i++;
             }
+            contentModel = xmlData.substring(startIndex, i);
+
             if (xmlData[i] !== ")") {
                 throw new Error("Unterminated content model");
             }
@@ -44130,27 +47921,27 @@ class DocTypeReader {
         i = skipWhitespace(xmlData, i);
 
         // Read element name
-        let elementName = "";
+        let startIndex = i;
         while (i < xmlData.length && !/\s/.test(xmlData[i])) {
-            elementName += xmlData[i];
             i++;
         }
+        let elementName = xmlData.substring(startIndex, i);
 
         // Validate element name
-        validateEntityName(elementName);
+        validateEntityName(elementName, { xmlVersion: this.xmlVersion });
 
         // Skip whitespace after element name
         i = skipWhitespace(xmlData, i);
 
         // Read attribute name
-        let attributeName = "";
+        startIndex = i;
         while (i < xmlData.length && !/\s/.test(xmlData[i])) {
-            attributeName += xmlData[i];
             i++;
         }
+        let attributeName = xmlData.substring(startIndex, i);
 
         // Validate attribute name
-        if (!validateEntityName(attributeName)) {
+        if (!validateEntityName(attributeName, { xmlVersion: this.xmlVersion })) {
             throw new Error(`Invalid attribute name: "${attributeName}"`);
         }
 
@@ -44175,15 +47966,17 @@ class DocTypeReader {
             // Read the list of allowed notations
             let allowedNotations = [];
             while (i < xmlData.length && xmlData[i] !== ")") {
-                let notation = "";
+
+
+                const startIndex = i;
                 while (i < xmlData.length && xmlData[i] !== "|" && xmlData[i] !== ")") {
-                    notation += xmlData[i];
                     i++;
                 }
+                let notation = xmlData.substring(startIndex, i);
 
                 // Validate notation name
                 notation = notation.trim();
-                if (!validateEntityName(notation)) {
+                if (!validateEntityName(notation, { xmlVersion: this.xmlVersion })) {
                     throw new Error(`Invalid notation name: "${notation}"`);
                 }
 
@@ -44205,10 +47998,11 @@ class DocTypeReader {
             attributeType += " (" + allowedNotations.join("|") + ")";
         } else {
             // Handle simple types (e.g., CDATA, ID, IDREF, etc.)
+            const startIndex = i;
             while (i < xmlData.length && !/\s/.test(xmlData[i])) {
-                attributeType += xmlData[i];
                 i++;
             }
+            attributeType += xmlData.substring(startIndex, i);
 
             // Validate simple attribute type
             const validTypes = ["CDATA", "ID", "IDREF", "IDREFS", "ENTITY", "ENTITIES", "NMTOKEN", "NMTOKENS"];
@@ -44260,22 +48054,22 @@ function hasSeq(data, seq, i) {
     return true;
 }
 
-function validateEntityName(name) {
-    if (isName(name))
+function validateEntityName(name, xmlVersion) {
+    if (qName(name, { xmlVersion: xmlVersion }))
         return name;
     else
         throw new Error(`Invalid entity name ${name}`);
 }
 
 const hexRegex = /^[-+]?0x[a-fA-F0-9]+$/;
+const binRegex = /^0b[01]+$/;
+const octRegex = /^0o[0-7]+$/;
 const numRegex = /^([\-\+])?(0*)([0-9]*(\.[0-9]*)?)$/;
-// const octRegex = /^0x[a-z0-9]+/;
-// const binRegex = /0x[a-z0-9]+/;
-
 
 const consider = {
     hex: true,
-    // oct: false,
+    binary: false,
+    octal: false,
     leadingZeros: true,
     decimalPoint: "\.",
     eNotation: true,
@@ -44289,18 +48083,19 @@ function toNumber(str, options = {}) {
 
     let trimmedStr = str.trim();
 
-    if (options.skipLike !== undefined && options.skipLike.test(trimmedStr)) return str;
-    else if (str === "0") return 0;
+    if (trimmedStr.length === 0) return str;
+    else if (options.skipLike !== undefined && options.skipLike.test(trimmedStr)) return str;
+    else if (trimmedStr === "0") return 0;
     else if (options.hex && hexRegex.test(trimmedStr)) {
         return parse_int(trimmedStr, 16);
-        // }else if (options.oct && octRegex.test(str)) {
-        //     return Number.parseInt(val, 8);
+    } else if (options.binary && binRegex.test(trimmedStr)) {
+        return parse_int(trimmedStr, 2);
+    } else if (options.octal && octRegex.test(trimmedStr)) {
+        return parse_int(trimmedStr, 8);
     } else if (!isFinite(trimmedStr)) { //Infinity
         return handleInfinity(str, Number(trimmedStr), options);
     } else if (trimmedStr.includes('e') || trimmedStr.includes('E')) { //eNotation
         return resolveEnotation(str, trimmedStr, options);
-        // }else if (options.parseBin && binRegex.test(str)) {
-        //     return Number.parseInt(val, 2);
     } else {
         //separate negative sign, leading zeros, and rest number
         const match = numRegex.exec(trimmedStr);
@@ -44366,11 +48161,16 @@ function resolveEnotation(str, trimmedStr, options) {
         else if (leadingZeros.length === 1
             && (notation[3].startsWith(`.${eChar}`) || notation[3][0] === eChar)) {
             return Number(trimmedStr);
-        } else if (options.leadingZeros && !eAdjacentToLeadingZeros) { //accept with leading zeros
-            //remove leading 0s
-            trimmedStr = (notation[1] || "") + notation[3];
+        } else if (leadingZeros.length > 0) {
+            // Has leading zeros — only accept if leadingZeros option allows it
+            if (options.leadingZeros && !eAdjacentToLeadingZeros) {
+                trimmedStr = (notation[1] || "") + notation[3];
+                return Number(trimmedStr);
+            } else return str;
+        } else {
+            // No leading zeros — always valid e-notation, parse it
             return Number(trimmedStr);
-        } else return str;
+        }
     } else {
         return str;
     }
@@ -44393,11 +48193,13 @@ function trimZeros(numStr) {
 }
 
 function parse_int(numStr, base) {
-    //polyfill
+    const str = numStr.trim();
+    if (base === 2 || base === 8) numStr = str.substring(2);
+
     if (parseInt) return parseInt(numStr, base);
     else if (Number.parseInt) return Number.parseInt(numStr, base);
     else if (window && window.parseInt) return window.parseInt(numStr, base);
-    else throw new Error("parseInt, Number.parseInt, window.parseInt are not supported")
+    else throw new Error("parseInt, Number.parseInt, window.parseInt are not supported");
 }
 
 /**
@@ -44442,6 +48244,1018 @@ function getIgnoreAttributesFn$1(ignoreAttributes) {
     return () => false
 }
 
+/**
+ * Expression - Parses and stores a tag pattern expression
+ * 
+ * Patterns are parsed once and stored in an optimized structure for fast matching.
+ * 
+ * @example
+ * const expr = new Expression("root.users.user");
+ * const expr2 = new Expression("..user[id]:first");
+ * const expr3 = new Expression("root/users/user", { separator: '/' });
+ */
+class Expression {
+  /**
+   * Create a new Expression
+   * @param {string} pattern - Pattern string (e.g., "root.users.user", "..user[id]")
+   * @param {Object} options - Configuration options
+   * @param {string} options.separator - Path separator (default: '.')
+   */
+  constructor(pattern, options = {}, data) {
+    this.pattern = pattern;
+    this.separator = options.separator || '.';
+    this.segments = this._parse(pattern);
+    this.data = data;
+    // Cache expensive checks for performance (O(1) instead of O(n))
+    this._hasDeepWildcard = this.segments.some(seg => seg.type === 'deep-wildcard');
+    this._hasAttributeCondition = this.segments.some(seg => seg.attrName !== undefined);
+    this._hasPositionSelector = this.segments.some(seg => seg.position !== undefined);
+  }
+
+  /**
+   * Parse pattern string into segments
+   * @private
+   * @param {string} pattern - Pattern to parse
+   * @returns {Array} Array of segment objects
+   */
+  _parse(pattern) {
+    const segments = [];
+
+    // Split by separator but handle ".." specially
+    let i = 0;
+    let currentPart = '';
+
+    while (i < pattern.length) {
+      if (pattern[i] === this.separator) {
+        // Check if next char is also separator (deep wildcard)
+        if (i + 1 < pattern.length && pattern[i + 1] === this.separator) {
+          // Flush current part if any
+          if (currentPart.trim()) {
+            segments.push(this._parseSegment(currentPart.trim()));
+            currentPart = '';
+          }
+          // Add deep wildcard
+          segments.push({ type: 'deep-wildcard' });
+          i += 2; // Skip both separators
+        } else {
+          // Regular separator
+          if (currentPart.trim()) {
+            segments.push(this._parseSegment(currentPart.trim()));
+          }
+          currentPart = '';
+          i++;
+        }
+      } else {
+        currentPart += pattern[i];
+        i++;
+      }
+    }
+
+    // Flush remaining part
+    if (currentPart.trim()) {
+      segments.push(this._parseSegment(currentPart.trim()));
+    }
+
+    return segments;
+  }
+
+  /**
+   * Parse a single segment
+   * @private
+   * @param {string} part - Segment string (e.g., "user", "ns::user", "user[id]", "ns::user:first")
+   * @returns {Object} Segment object
+   */
+  _parseSegment(part) {
+    const segment = { type: 'tag' };
+
+    // NEW NAMESPACE SYNTAX (v2.0):
+    // ============================
+    // Namespace uses DOUBLE colon (::)
+    // Position uses SINGLE colon (:)
+    // 
+    // Examples:
+    //   "user"              → tag
+    //   "user:first"        → tag + position
+    //   "user[id]"          → tag + attribute
+    //   "user[id]:first"    → tag + attribute + position
+    //   "ns::user"          → namespace + tag
+    //   "ns::user:first"    → namespace + tag + position
+    //   "ns::user[id]"      → namespace + tag + attribute
+    //   "ns::user[id]:first" → namespace + tag + attribute + position
+    //   "ns::first"         → namespace + tag named "first" (NO ambiguity!)
+    //
+    // This eliminates all ambiguity:
+    //   :: = namespace separator
+    //   :  = position selector
+    //   [] = attributes
+
+    // Step 1: Extract brackets [attr] or [attr=value]
+    let bracketContent = null;
+    let withoutBrackets = part;
+
+    const bracketMatch = part.match(/^([^\[]+)(\[[^\]]*\])(.*)$/);
+    if (bracketMatch) {
+      withoutBrackets = bracketMatch[1] + bracketMatch[3];
+      if (bracketMatch[2]) {
+        const content = bracketMatch[2].slice(1, -1);
+        if (content) {
+          bracketContent = content;
+        }
+      }
+    }
+
+    // Step 2: Check for namespace (double colon ::)
+    let namespace = undefined;
+    let tagAndPosition = withoutBrackets;
+
+    if (withoutBrackets.includes('::')) {
+      const nsIndex = withoutBrackets.indexOf('::');
+      namespace = withoutBrackets.substring(0, nsIndex).trim();
+      tagAndPosition = withoutBrackets.substring(nsIndex + 2).trim(); // Skip ::
+
+      if (!namespace) {
+        throw new Error(`Invalid namespace in pattern: ${part}`);
+      }
+    }
+
+    // Step 3: Parse tag and position (single colon :)
+    let tag = undefined;
+    let positionMatch = null;
+
+    if (tagAndPosition.includes(':')) {
+      const colonIndex = tagAndPosition.lastIndexOf(':'); // Use last colon for position
+      const tagPart = tagAndPosition.substring(0, colonIndex).trim();
+      const posPart = tagAndPosition.substring(colonIndex + 1).trim();
+
+      // Verify position is a valid keyword
+      const isPositionKeyword = ['first', 'last', 'odd', 'even'].includes(posPart) ||
+        /^nth\(\d+\)$/.test(posPart);
+
+      if (isPositionKeyword) {
+        tag = tagPart;
+        positionMatch = posPart;
+      } else {
+        // Not a valid position keyword, treat whole thing as tag
+        tag = tagAndPosition;
+      }
+    } else {
+      tag = tagAndPosition;
+    }
+
+    if (!tag) {
+      throw new Error(`Invalid segment pattern: ${part}`);
+    }
+
+    segment.tag = tag;
+    if (namespace) {
+      segment.namespace = namespace;
+    }
+
+    // Step 4: Parse attributes
+    if (bracketContent) {
+      if (bracketContent.includes('=')) {
+        const eqIndex = bracketContent.indexOf('=');
+        segment.attrName = bracketContent.substring(0, eqIndex).trim();
+        segment.attrValue = bracketContent.substring(eqIndex + 1).trim();
+      } else {
+        segment.attrName = bracketContent.trim();
+      }
+    }
+
+    // Step 5: Parse position selector
+    if (positionMatch) {
+      const nthMatch = positionMatch.match(/^nth\((\d+)\)$/);
+      if (nthMatch) {
+        segment.position = 'nth';
+        segment.positionValue = parseInt(nthMatch[1], 10);
+      } else {
+        segment.position = positionMatch;
+      }
+    }
+
+    return segment;
+  }
+
+  /**
+   * Get the number of segments
+   * @returns {number}
+   */
+  get length() {
+    return this.segments.length;
+  }
+
+  /**
+   * Check if expression contains deep wildcard
+   * @returns {boolean}
+   */
+  hasDeepWildcard() {
+    return this._hasDeepWildcard;
+  }
+
+  /**
+   * Check if expression has attribute conditions
+   * @returns {boolean}
+   */
+  hasAttributeCondition() {
+    return this._hasAttributeCondition;
+  }
+
+  /**
+   * Check if expression has position selectors
+   * @returns {boolean}
+   */
+  hasPositionSelector() {
+    return this._hasPositionSelector;
+  }
+
+  /**
+   * Get string representation
+   * @returns {string}
+   */
+  toString() {
+    return this.pattern;
+  }
+}
+
+/**
+ * ExpressionSet - An indexed collection of Expressions for efficient bulk matching
+ *
+ * Instead of iterating all expressions on every tag, ExpressionSet pre-indexes
+ * them at insertion time by depth and terminal tag name. At match time, only
+ * the relevant bucket is evaluated — typically reducing checks from O(E) to O(1)
+ * lookup plus O(small bucket) matches.
+ *
+ * Three buckets are maintained:
+ *  - `_byDepthAndTag`  — exact depth + exact tag name  (tightest, used first)
+ *  - `_wildcardByDepth` — exact depth + wildcard tag `*` (depth-matched only)
+ *  - `_deepWildcards`  — expressions containing `..`  (cannot be depth-indexed)
+ *
+ * @example
+ * import { Expression, ExpressionSet } from 'fast-xml-tagger';
+ *
+ * // Build once at config time
+ * const stopNodes = new ExpressionSet();
+ * stopNodes.add(new Expression('root.users.user'));
+ * stopNodes.add(new Expression('root.config.setting'));
+ * stopNodes.add(new Expression('..script'));
+ *
+ * // Query on every tag — hot path
+ * if (stopNodes.matchesAny(matcher)) { ... }
+ */
+class ExpressionSet {
+  constructor() {
+    /** @type {Map<string, import('./Expression.js').default[]>} depth:tag → expressions */
+    this._byDepthAndTag = new Map();
+
+    /** @type {Map<number, import('./Expression.js').default[]>} depth → wildcard-tag expressions */
+    this._wildcardByDepth = new Map();
+
+    /** @type {import('./Expression.js').default[]} expressions containing deep wildcard (..) */
+    this._deepWildcards = [];
+
+    /** @type {Set<string>} pattern strings already added — used for deduplication */
+    this._patterns = new Set();
+
+    /** @type {boolean} whether the set is sealed against further additions */
+    this._sealed = false;
+  }
+
+  /**
+   * Add an Expression to the set.
+   * Duplicate patterns (same pattern string) are silently ignored.
+   *
+   * @param {import('./Expression.js').default} expression - A pre-constructed Expression instance
+   * @returns {this} for chaining
+   * @throws {TypeError} if called after seal()
+   *
+   * @example
+   * set.add(new Expression('root.users.user'));
+   * set.add(new Expression('..script'));
+   */
+  add(expression) {
+    if (this._sealed) {
+      throw new TypeError(
+        'ExpressionSet is sealed. Create a new ExpressionSet to add more expressions.'
+      );
+    }
+
+    // Deduplicate by pattern string
+    if (this._patterns.has(expression.pattern)) return this;
+    this._patterns.add(expression.pattern);
+
+    if (expression.hasDeepWildcard()) {
+      this._deepWildcards.push(expression);
+      return this;
+    }
+
+    const depth = expression.length;
+    const lastSeg = expression.segments[expression.segments.length - 1];
+    const tag = lastSeg?.tag;
+
+    if (!tag || tag === '*') {
+      // Can index by depth but not by tag
+      if (!this._wildcardByDepth.has(depth)) this._wildcardByDepth.set(depth, []);
+      this._wildcardByDepth.get(depth).push(expression);
+    } else {
+      // Tightest bucket: depth + tag
+      const key = `${depth}:${tag}`;
+      if (!this._byDepthAndTag.has(key)) this._byDepthAndTag.set(key, []);
+      this._byDepthAndTag.get(key).push(expression);
+    }
+
+    return this;
+  }
+
+  /**
+   * Add multiple expressions at once.
+   *
+   * @param {import('./Expression.js').default[]} expressions - Array of Expression instances
+   * @returns {this} for chaining
+   *
+   * @example
+   * set.addAll([
+   *   new Expression('root.users.user'),
+   *   new Expression('root.config.setting'),
+   * ]);
+   */
+  addAll(expressions) {
+    for (const expr of expressions) this.add(expr);
+    return this;
+  }
+
+  /**
+   * Check whether a pattern string is already present in the set.
+   *
+   * @param {import('./Expression.js').default} expression
+   * @returns {boolean}
+   */
+  has(expression) {
+    return this._patterns.has(expression.pattern);
+  }
+
+  /**
+   * Number of expressions in the set.
+   * @type {number}
+   */
+  get size() {
+    return this._patterns.size;
+  }
+
+  /**
+   * Seal the set against further modifications.
+   * Useful to prevent accidental mutations after config is built.
+   * Calling add() or addAll() on a sealed set throws a TypeError.
+   *
+   * @returns {this}
+   */
+  seal() {
+    this._sealed = true;
+    return this;
+  }
+
+  /**
+   * Whether the set has been sealed.
+   * @type {boolean}
+   */
+  get isSealed() {
+    return this._sealed;
+  }
+
+  /**
+   * Test whether the matcher's current path matches any expression in the set.
+   *
+   * Evaluation order (cheapest → most expensive):
+   *  1. Exact depth + tag bucket  — O(1) lookup, typically 0–2 expressions
+   *  2. Depth-only wildcard bucket — O(1) lookup, rare
+   *  3. Deep-wildcard list         — always checked, but usually small
+   *
+   * @param {import('./Matcher.js').default} matcher - Matcher instance (or readOnly view)
+   * @returns {boolean} true if any expression matches the current path
+   *
+   * @example
+   * if (stopNodes.matchesAny(matcher)) {
+   *   // handle stop node
+   * }
+   */
+  matchesAny(matcher) {
+    return this.findMatch(matcher) !== null;
+  }
+  /**
+ * Find and return the first Expression that matches the matcher's current path.
+ *
+ * Uses the same evaluation order as matchesAny (cheapest → most expensive):
+ *  1. Exact depth + tag bucket
+ *  2. Depth-only wildcard bucket
+ *  3. Deep-wildcard list
+ *
+ * @param {import('./Matcher.js').default} matcher - Matcher instance (or readOnly view)
+ * @returns {import('./Expression.js').default | null} the first matching Expression, or null
+ *
+ * @example
+ * const expr = stopNodes.findMatch(matcher);
+ * if (expr) {
+ *   // access expr.config, expr.pattern, etc.
+ * }
+ */
+  findMatch(matcher) {
+    const depth = matcher.getDepth();
+    const tag = matcher.getCurrentTag();
+
+    // 1. Tightest bucket — most expressions live here
+    const exactKey = `${depth}:${tag}`;
+    const exactBucket = this._byDepthAndTag.get(exactKey);
+    if (exactBucket) {
+      for (let i = 0; i < exactBucket.length; i++) {
+        if (matcher.matches(exactBucket[i])) return exactBucket[i];
+      }
+    }
+
+    // 2. Depth-matched wildcard-tag expressions
+    const wildcardBucket = this._wildcardByDepth.get(depth);
+    if (wildcardBucket) {
+      for (let i = 0; i < wildcardBucket.length; i++) {
+        if (matcher.matches(wildcardBucket[i])) return wildcardBucket[i];
+      }
+    }
+
+    // 3. Deep wildcards — cannot be pre-filtered by depth or tag
+    for (let i = 0; i < this._deepWildcards.length; i++) {
+      if (matcher.matches(this._deepWildcards[i])) return this._deepWildcards[i];
+    }
+
+    return null;
+  }
+}
+
+/**
+ * MatcherView - A lightweight read-only view over a Matcher's internal state.
+ *
+ * Created once by Matcher and reused across all callbacks. Holds a direct
+ * reference to the parent Matcher so it always reflects current parser state
+ * with zero copying or freezing overhead.
+ *
+ * Users receive this via {@link Matcher#readOnly} or directly from parser
+ * callbacks. It exposes all query and matching methods but has no mutation
+ * methods — misuse is caught at the TypeScript level rather than at runtime.
+ *
+ * @example
+ * const matcher = new Matcher();
+ * const view = matcher.readOnly();
+ *
+ * matcher.push("root", {});
+ * view.getCurrentTag(); // "root"
+ * view.getDepth();      // 1
+ */
+class MatcherView {
+  /**
+   * @param {Matcher} matcher - The parent Matcher instance to read from.
+   */
+  constructor(matcher) {
+    this._matcher = matcher;
+  }
+
+  /**
+   * Get the path separator used by the parent matcher.
+   * @returns {string}
+   */
+  get separator() {
+    return this._matcher.separator;
+  }
+
+  /**
+   * Get current tag name.
+   * @returns {string|undefined}
+   */
+  getCurrentTag() {
+    const path = this._matcher.path;
+    return path.length > 0 ? path[path.length - 1].tag : undefined;
+  }
+
+  /**
+   * Get current namespace.
+   * @returns {string|undefined}
+   */
+  getCurrentNamespace() {
+    const path = this._matcher.path;
+    return path.length > 0 ? path[path.length - 1].namespace : undefined;
+  }
+
+  /**
+   * Get current node's attribute value.
+   * @param {string} attrName
+   * @returns {*}
+   */
+  getAttrValue(attrName) {
+    const path = this._matcher.path;
+    if (path.length === 0) return undefined;
+    return path[path.length - 1].values?.[attrName];
+  }
+
+  /**
+   * Check if current node has an attribute.
+   * @param {string} attrName
+   * @returns {boolean}
+   */
+  hasAttr(attrName) {
+    const path = this._matcher.path;
+    if (path.length === 0) return false;
+    const current = path[path.length - 1];
+    return current.values !== undefined && attrName in current.values;
+  }
+
+  /**
+   * Get current node's sibling position (child index in parent).
+   * @returns {number}
+   */
+  getPosition() {
+    const path = this._matcher.path;
+    if (path.length === 0) return -1;
+    return path[path.length - 1].position ?? 0;
+  }
+
+  /**
+   * Get current node's repeat counter (occurrence count of this tag name).
+   * @returns {number}
+   */
+  getCounter() {
+    const path = this._matcher.path;
+    if (path.length === 0) return -1;
+    return path[path.length - 1].counter ?? 0;
+  }
+
+  /**
+   * Get current node's sibling index (alias for getPosition).
+   * @returns {number}
+   * @deprecated Use getPosition() or getCounter() instead
+   */
+  getIndex() {
+    return this.getPosition();
+  }
+
+  /**
+   * Get current path depth.
+   * @returns {number}
+   */
+  getDepth() {
+    return this._matcher.path.length;
+  }
+
+  /**
+   * Get path as string.
+   * @param {string} [separator] - Optional separator (uses default if not provided)
+   * @param {boolean} [includeNamespace=true]
+   * @returns {string}
+   */
+  toString(separator, includeNamespace = true) {
+    return this._matcher.toString(separator, includeNamespace);
+  }
+
+  /**
+   * Get path as array of tag names.
+   * @returns {string[]}
+   */
+  toArray() {
+    return this._matcher.path.map(n => n.tag);
+  }
+
+  /**
+   * Match current path against an Expression.
+   * @param {Expression} expression
+   * @returns {boolean}
+   */
+  matches(expression) {
+    return this._matcher.matches(expression);
+  }
+
+  /**
+   * Match any expression in the given set against the current path.
+   * @param {ExpressionSet} exprSet
+   * @returns {boolean}
+   */
+  matchesAny(exprSet) {
+    return exprSet.matchesAny(this._matcher);
+  }
+}
+
+/**
+ * Matcher - Tracks current path in XML/JSON tree and matches against Expressions.
+ *
+ * The matcher maintains a stack of nodes representing the current path from root to
+ * current tag. It only stores attribute values for the current (top) node to minimize
+ * memory usage. Sibling tracking is used to auto-calculate position and counter.
+ *
+ * Use {@link Matcher#readOnly} to obtain a {@link MatcherView} safe to pass to
+ * user callbacks — it always reflects current state with no Proxy overhead.
+ *
+ * @example
+ * const matcher = new Matcher();
+ * matcher.push("root", {});
+ * matcher.push("users", {});
+ * matcher.push("user", { id: "123", type: "admin" });
+ *
+ * const expr = new Expression("root.users.user");
+ * matcher.matches(expr); // true
+ */
+class Matcher {
+  /**
+   * Create a new Matcher.
+   * @param {Object} [options={}]
+   * @param {string} [options.separator='.'] - Default path separator
+   */
+  constructor(options = {}) {
+    this.separator = options.separator || '.';
+    this.path = [];
+    this.siblingStacks = [];
+    // Each path node: { tag, values, position, counter, namespace? }
+    // values only present for current (last) node
+    // Each siblingStacks entry: Map<tagName, count> tracking occurrences at each level
+    this._pathStringCache = null;
+    this._view = new MatcherView(this);
+  }
+
+  /**
+   * Push a new tag onto the path.
+   * @param {string} tagName
+   * @param {Object|null} [attrValues=null]
+   * @param {string|null} [namespace=null]
+   */
+  push(tagName, attrValues = null, namespace = null) {
+    this._pathStringCache = null;
+
+    // Remove values from previous current node (now becoming ancestor)
+    if (this.path.length > 0) {
+      this.path[this.path.length - 1].values = undefined;
+    }
+
+    // Get or create sibling tracking for current level
+    const currentLevel = this.path.length;
+    if (!this.siblingStacks[currentLevel]) {
+      this.siblingStacks[currentLevel] = new Map();
+    }
+
+    const siblings = this.siblingStacks[currentLevel];
+
+    // Create a unique key for sibling tracking that includes namespace
+    const siblingKey = namespace ? `${namespace}:${tagName}` : tagName;
+
+    // Calculate counter (how many times this tag appeared at this level)
+    const counter = siblings.get(siblingKey) || 0;
+
+    // Calculate position (total children at this level so far)
+    let position = 0;
+    for (const count of siblings.values()) {
+      position += count;
+    }
+
+    // Update sibling count for this tag
+    siblings.set(siblingKey, counter + 1);
+
+    // Create new node
+    const node = {
+      tag: tagName,
+      position: position,
+      counter: counter
+    };
+
+    if (namespace !== null && namespace !== undefined) {
+      node.namespace = namespace;
+    }
+
+    if (attrValues !== null && attrValues !== undefined) {
+      node.values = attrValues;
+    }
+
+    this.path.push(node);
+  }
+
+  /**
+   * Pop the last tag from the path.
+   * @returns {Object|undefined} The popped node
+   */
+  pop() {
+    if (this.path.length === 0) return undefined;
+    this._pathStringCache = null;
+
+    const node = this.path.pop();
+
+    if (this.siblingStacks.length > this.path.length + 1) {
+      this.siblingStacks.length = this.path.length + 1;
+    }
+
+    return node;
+  }
+
+  /**
+   * Update current node's attribute values.
+   * Useful when attributes are parsed after push.
+   * @param {Object} attrValues
+   */
+  updateCurrent(attrValues) {
+    if (this.path.length > 0) {
+      const current = this.path[this.path.length - 1];
+      if (attrValues !== null && attrValues !== undefined) {
+        current.values = attrValues;
+      }
+    }
+  }
+
+  /**
+   * Get current tag name.
+   * @returns {string|undefined}
+   */
+  getCurrentTag() {
+    return this.path.length > 0 ? this.path[this.path.length - 1].tag : undefined;
+  }
+
+  /**
+   * Get current namespace.
+   * @returns {string|undefined}
+   */
+  getCurrentNamespace() {
+    return this.path.length > 0 ? this.path[this.path.length - 1].namespace : undefined;
+  }
+
+  /**
+   * Get current node's attribute value.
+   * @param {string} attrName
+   * @returns {*}
+   */
+  getAttrValue(attrName) {
+    if (this.path.length === 0) return undefined;
+    return this.path[this.path.length - 1].values?.[attrName];
+  }
+
+  /**
+   * Check if current node has an attribute.
+   * @param {string} attrName
+   * @returns {boolean}
+   */
+  hasAttr(attrName) {
+    if (this.path.length === 0) return false;
+    const current = this.path[this.path.length - 1];
+    return current.values !== undefined && attrName in current.values;
+  }
+
+  /**
+   * Get current node's sibling position (child index in parent).
+   * @returns {number}
+   */
+  getPosition() {
+    if (this.path.length === 0) return -1;
+    return this.path[this.path.length - 1].position ?? 0;
+  }
+
+  /**
+   * Get current node's repeat counter (occurrence count of this tag name).
+   * @returns {number}
+   */
+  getCounter() {
+    if (this.path.length === 0) return -1;
+    return this.path[this.path.length - 1].counter ?? 0;
+  }
+
+  /**
+   * Get current node's sibling index (alias for getPosition).
+   * @returns {number}
+   * @deprecated Use getPosition() or getCounter() instead
+   */
+  getIndex() {
+    return this.getPosition();
+  }
+
+  /**
+   * Get current path depth.
+   * @returns {number}
+   */
+  getDepth() {
+    return this.path.length;
+  }
+
+  /**
+   * Get path as string.
+   * @param {string} [separator] - Optional separator (uses default if not provided)
+   * @param {boolean} [includeNamespace=true]
+   * @returns {string}
+   */
+  toString(separator, includeNamespace = true) {
+    const sep = separator || this.separator;
+    const isDefault = (sep === this.separator && includeNamespace === true);
+
+    if (isDefault) {
+      if (this._pathStringCache !== null) {
+        return this._pathStringCache;
+      }
+      const result = this.path.map(n =>
+        (n.namespace) ? `${n.namespace}:${n.tag}` : n.tag
+      ).join(sep);
+      this._pathStringCache = result;
+      return result;
+    }
+
+    return this.path.map(n =>
+      (includeNamespace && n.namespace) ? `${n.namespace}:${n.tag}` : n.tag
+    ).join(sep);
+  }
+
+  /**
+   * Get path as array of tag names.
+   * @returns {string[]}
+   */
+  toArray() {
+    return this.path.map(n => n.tag);
+  }
+
+  /**
+   * Reset the path to empty.
+   */
+  reset() {
+    this._pathStringCache = null;
+    this.path = [];
+    this.siblingStacks = [];
+  }
+
+  /**
+   * Match current path against an Expression.
+   * @param {Expression} expression
+   * @returns {boolean}
+   */
+  matches(expression) {
+    const segments = expression.segments;
+
+    if (segments.length === 0) {
+      return false;
+    }
+
+    if (expression.hasDeepWildcard()) {
+      return this._matchWithDeepWildcard(segments);
+    }
+
+    return this._matchSimple(segments);
+  }
+
+  /**
+   * @private
+   */
+  _matchSimple(segments) {
+    if (this.path.length !== segments.length) {
+      return false;
+    }
+
+    for (let i = 0; i < segments.length; i++) {
+      if (!this._matchSegment(segments[i], this.path[i], i === this.path.length - 1)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * @private
+   */
+  _matchWithDeepWildcard(segments) {
+    let pathIdx = this.path.length - 1;
+    let segIdx = segments.length - 1;
+
+    while (segIdx >= 0 && pathIdx >= 0) {
+      const segment = segments[segIdx];
+
+      if (segment.type === 'deep-wildcard') {
+        segIdx--;
+
+        if (segIdx < 0) {
+          return true;
+        }
+
+        const nextSeg = segments[segIdx];
+        let found = false;
+
+        for (let i = pathIdx; i >= 0; i--) {
+          if (this._matchSegment(nextSeg, this.path[i], i === this.path.length - 1)) {
+            pathIdx = i - 1;
+            segIdx--;
+            found = true;
+            break;
+          }
+        }
+
+        if (!found) {
+          return false;
+        }
+      } else {
+        if (!this._matchSegment(segment, this.path[pathIdx], pathIdx === this.path.length - 1)) {
+          return false;
+        }
+        pathIdx--;
+        segIdx--;
+      }
+    }
+
+    return segIdx < 0;
+  }
+
+  /**
+   * @private
+   */
+  _matchSegment(segment, node, isCurrentNode) {
+    if (segment.tag !== '*' && segment.tag !== node.tag) {
+      return false;
+    }
+
+    if (segment.namespace !== undefined) {
+      if (segment.namespace !== '*' && segment.namespace !== node.namespace) {
+        return false;
+      }
+    }
+
+    if (segment.attrName !== undefined) {
+      if (!isCurrentNode) {
+        return false;
+      }
+
+      if (!node.values || !(segment.attrName in node.values)) {
+        return false;
+      }
+
+      if (segment.attrValue !== undefined) {
+        if (String(node.values[segment.attrName]) !== String(segment.attrValue)) {
+          return false;
+        }
+      }
+    }
+
+    if (segment.position !== undefined) {
+      if (!isCurrentNode) {
+        return false;
+      }
+
+      const counter = node.counter ?? 0;
+
+      if (segment.position === 'first' && counter !== 0) {
+        return false;
+      } else if (segment.position === 'odd' && counter % 2 !== 1) {
+        return false;
+      } else if (segment.position === 'even' && counter % 2 !== 0) {
+        return false;
+      } else if (segment.position === 'nth' && counter !== segment.positionValue) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Match any expression in the given set against the current path.
+   * @param {ExpressionSet} exprSet
+   * @returns {boolean}
+   */
+  matchesAny(exprSet) {
+    return exprSet.matchesAny(this);
+  }
+
+  /**
+   * Create a snapshot of current state.
+   * @returns {Object}
+   */
+  snapshot() {
+    return {
+      path: this.path.map(node => ({ ...node })),
+      siblingStacks: this.siblingStacks.map(map => new Map(map))
+    };
+  }
+
+  /**
+   * Restore state from snapshot.
+   * @param {Object} snapshot
+   */
+  restore(snapshot) {
+    this._pathStringCache = null;
+    this.path = snapshot.path.map(node => ({ ...node }));
+    this.siblingStacks = snapshot.siblingStacks.map(map => new Map(map));
+  }
+
+  /**
+   * Return the read-only {@link MatcherView} for this matcher.
+   *
+   * The same instance is returned on every call — no allocation occurs.
+   * It always reflects the current parser state and is safe to pass to
+   * user callbacks without risk of accidental mutation.
+   *
+   * @returns {MatcherView}
+   *
+   * @example
+   * const view = matcher.readOnly();
+   * // pass view to callbacks — it stays in sync automatically
+   * view.matches(expr);       // ✓
+   * view.getCurrentTag();     // ✓
+   * // view.push(...)         // ✗ method does not exist — caught by TypeScript
+   */
+  readOnly() {
+    return this._view;
+  }
+}
+
 // const regx =
 //   '<((!\\[CDATA\\[([\\s\\S]*?)(]]>))|((NAME:)?(NAME))([^>]*)>|((\\/)(NAME)\\s*>))([^<]*)'
 //   .replace(/NAME/g, util.nameRegexp);
@@ -44449,37 +49263,62 @@ function getIgnoreAttributesFn$1(ignoreAttributes) {
 //const tagsRegx = new RegExp("<(\\/?[\\w:\\-\._]+)([^>]*)>(\\s*"+cdataRegx+")*([^<]+)?","g");
 //const tagsRegx = new RegExp("<(\\/?)((\\w*:)?([\\w:\\-\._]+))([^>]*)>([^<]*)("+cdataRegx+"([^<]*))*([^<]+)?","g");
 
+// Helper functions for attribute and namespace handling
+
+/**
+ * Extract raw attributes (without prefix) from prefixed attribute map
+ * @param {object} prefixedAttrs - Attributes with prefix from buildAttributesMap
+ * @param {object} options - Parser options containing attributeNamePrefix
+ * @returns {object} Raw attributes for matcher
+ */
+function extractRawAttributes(prefixedAttrs, options) {
+  if (!prefixedAttrs) return {};
+
+  // Handle attributesGroupName option
+  const attrs = options.attributesGroupName
+    ? prefixedAttrs[options.attributesGroupName]
+    : prefixedAttrs;
+
+  if (!attrs) return {};
+
+  const rawAttrs = {};
+  for (const key in attrs) {
+    // Remove the attribute prefix to get raw name
+    if (key.startsWith(options.attributeNamePrefix)) {
+      const rawName = key.substring(options.attributeNamePrefix.length);
+      rawAttrs[rawName] = attrs[key];
+    } else {
+      // Attribute without prefix (shouldn't normally happen, but be safe)
+      rawAttrs[key] = attrs[key];
+    }
+  }
+  return rawAttrs;
+}
+
+/**
+ * Extract namespace from raw tag name
+ * @param {string} rawTagName - Tag name possibly with namespace (e.g., "soap:Envelope")
+ * @returns {string|undefined} Namespace or undefined
+ */
+function extractNamespace(rawTagName) {
+  if (!rawTagName || typeof rawTagName !== 'string') return undefined;
+
+  const colonIndex = rawTagName.indexOf(':');
+  if (colonIndex !== -1 && colonIndex > 0) {
+    const ns = rawTagName.substring(0, colonIndex);
+    // Don't treat xmlns as a namespace
+    if (ns !== 'xmlns') {
+      return ns;
+    }
+  }
+  return undefined;
+}
+
 class OrderedObjParser {
-  constructor(options) {
+  constructor(options, externalEntities) {
     this.options = options;
     this.currentNode = null;
     this.tagsNodeStack = [];
-    this.docTypeEntities = {};
-    this.lastEntities = {
-      "apos": { regex: /&(apos|#39|#x27);/g, val: "'" },
-      "gt": { regex: /&(gt|#62|#x3E);/g, val: ">" },
-      "lt": { regex: /&(lt|#60|#x3C);/g, val: "<" },
-      "quot": { regex: /&(quot|#34|#x22);/g, val: "\"" },
-    };
-    this.ampEntity = { regex: /&(amp|#38|#x26);/g, val: "&" };
-    this.htmlEntities = {
-      "space": { regex: /&(nbsp|#160);/g, val: " " },
-      // "lt" : { regex: /&(lt|#60);/g, val: "<" },
-      // "gt" : { regex: /&(gt|#62);/g, val: ">" },
-      // "amp" : { regex: /&(amp|#38);/g, val: "&" },
-      // "quot" : { regex: /&(quot|#34);/g, val: "\"" },
-      // "apos" : { regex: /&(apos|#39);/g, val: "'" },
-      "cent": { regex: /&(cent|#162);/g, val: "¢" },
-      "pound": { regex: /&(pound|#163);/g, val: "£" },
-      "yen": { regex: /&(yen|#165);/g, val: "¥" },
-      "euro": { regex: /&(euro|#8364);/g, val: "€" },
-      "copyright": { regex: /&(copy|#169);/g, val: "©" },
-      "reg": { regex: /&(reg|#174);/g, val: "®" },
-      "inr": { regex: /&(inr|#8377);/g, val: "₹" },
-      "num_dec": { regex: /&#([0-9]{1,7});/g, val: (_, str) => fromCodePoint(str, 10, "&#") },
-      "num_hex": { regex: /&#x([0-9a-fA-F]{1,6});/g, val: (_, str) => fromCodePoint(str, 16, "&#x") },
-    };
-    this.addExternalEntities = addExternalEntities;
     this.parseXml = parseXml;
     this.parseTextData = parseTextData;
     this.resolveNameSpace = resolveNameSpace;
@@ -44492,66 +49331,85 @@ class OrderedObjParser {
     this.ignoreAttributesFn = getIgnoreAttributesFn$1(this.options.ignoreAttributes);
     this.entityExpansionCount = 0;
     this.currentExpandedLength = 0;
+    let namedEntities = { ...XML };
+    if (this.options.entityDecoder) {
+      this.entityDecoder = this.options.entityDecoder;
+    } else {
+      if (typeof this.options.htmlEntities === "object") namedEntities = this.options.htmlEntities;
+      else if (this.options.htmlEntities === true) namedEntities = { ...COMMON_HTML, ...CURRENCY };
+      this.entityDecoder = new EntityDecoder({
+        namedEntities: { ...namedEntities, ...externalEntities },
+        numericAllowed: this.options.htmlEntities,
+        limit: {
+          maxTotalExpansions: this.options.processEntities.maxTotalExpansions,
+          maxExpandedLength: this.options.processEntities.maxExpandedLength,
+          applyLimitsTo: this.options.processEntities.appliesTo,
+        }
+        //postCheck: resolved => resolved
+      });
+    }
 
-    if (this.options.stopNodes && this.options.stopNodes.length > 0) {
-      this.stopNodesExact = new Set();
-      this.stopNodesWildcard = new Set();
-      for (let i = 0; i < this.options.stopNodes.length; i++) {
-        const stopNodeExp = this.options.stopNodes[i];
-        if (typeof stopNodeExp !== 'string') continue;
-        if (stopNodeExp.startsWith("*.")) {
-          this.stopNodesWildcard.add(stopNodeExp.substring(2));
-        } else {
-          this.stopNodesExact.add(stopNodeExp);
+    // Initialize path matcher for path-expression-matcher
+    this.matcher = new Matcher();
+    this.readonlyMatcher = this.matcher.readOnly();
+
+    // Flag to track if current node is a stop node (optimization)
+    this.isCurrentNodeStopNode = false;
+
+    // Pre-compile stopNodes expressions
+    this.stopNodeExpressionsSet = new ExpressionSet();
+    const stopNodesOpts = this.options.stopNodes;
+    if (stopNodesOpts && stopNodesOpts.length > 0) {
+      for (let i = 0; i < stopNodesOpts.length; i++) {
+        const stopNodeExp = stopNodesOpts[i];
+        if (typeof stopNodeExp === 'string') {
+          // Convert string to Expression object
+          this.stopNodeExpressionsSet.add(new Expression(stopNodeExp));
+        } else if (stopNodeExp instanceof Expression) {
+          // Already an Expression object
+          this.stopNodeExpressionsSet.add(stopNodeExp);
         }
       }
+      this.stopNodeExpressionsSet.seal();
     }
   }
 
 }
 
-function addExternalEntities(externalEntities) {
-  const entKeys = Object.keys(externalEntities);
-  for (let i = 0; i < entKeys.length; i++) {
-    const ent = entKeys[i];
-    const escaped = ent.replace(/[.\-+*:]/g, '\\.');
-    this.lastEntities[ent] = {
-      regex: new RegExp("&" + escaped + ";", "g"),
-      val: externalEntities[ent]
-    };
-  }
-}
 
 /**
  * @param {string} val
  * @param {string} tagName
- * @param {string} jPath
+ * @param {string|Matcher} jPath - jPath string or Matcher instance based on options.jPath
  * @param {boolean} dontTrim
  * @param {boolean} hasAttributes
  * @param {boolean} isLeafNode
  * @param {boolean} escapeEntities
  */
 function parseTextData(val, tagName, jPath, dontTrim, hasAttributes, isLeafNode, escapeEntities) {
+  const options = this.options;
   if (val !== undefined) {
-    if (this.options.trimValues && !dontTrim) {
+    if (options.trimValues && !dontTrim) {
       val = val.trim();
     }
     if (val.length > 0) {
       if (!escapeEntities) val = this.replaceEntitiesValue(val, tagName, jPath);
 
-      const newval = this.options.tagValueProcessor(tagName, val, jPath, hasAttributes, isLeafNode);
+      // Pass jPath string or matcher based on options.jPath setting
+      const jPathOrMatcher = options.jPath ? jPath.toString() : jPath;
+      const newval = options.tagValueProcessor(tagName, val, jPathOrMatcher, hasAttributes, isLeafNode);
       if (newval === null || newval === undefined) {
         //don't parse
         return val;
       } else if (typeof newval !== typeof val || newval !== val) {
         //overwrite
         return newval;
-      } else if (this.options.trimValues) {
-        return parseValue(val, this.options.parseTagValue, this.options.numberParseOptions);
+      } else if (options.trimValues) {
+        return parseValue(val, options.parseTagValue, options.numberParseOptions);
       } else {
         const trimmedVal = val.trim();
         if (trimmedVal === val) {
-          return parseValue(val, this.options.parseTagValue, this.options.numberParseOptions);
+          return parseValue(val, options.parseTagValue, options.numberParseOptions);
         } else {
           return val;
         }
@@ -44578,187 +49436,229 @@ function resolveNameSpace(tagname) {
 //const attrsRegx = new RegExp("([\\w\\-\\.\\:]+)\\s*=\\s*(['\"])((.|\n)*?)\\2","gm");
 const attrsRegx = new RegExp('([^\\s=]+)\\s*(=\\s*([\'"])([\\s\\S]*?)\\3)?', 'gm');
 
-function buildAttributesMap(attrStr, jPath, tagName) {
-  if (this.options.ignoreAttributes !== true && typeof attrStr === 'string') {
+function buildAttributesMap(attrStr, jPath, tagName, force = false) {
+  const options = this.options;
+  if (force === true || (options.ignoreAttributes !== true && typeof attrStr === 'string')) {
     // attrStr = attrStr.replace(/\r?\n/g, ' ');
     //attrStr = attrStr || attrStr.trim();
 
     const matches = getAllMatches(attrStr, attrsRegx);
     const len = matches.length; //don't make it inline
     const attrs = {};
+
+    // Pre-process values once: trim + entity replacement
+    // Reused in both matcher update and second pass
+    const processedVals = new Array(len);
+    let hasRawAttrs = false;
+    const rawAttrsForMatcher = {};
+
     for (let i = 0; i < len; i++) {
       const attrName = this.resolveNameSpace(matches[i][1]);
-      if (this.ignoreAttributesFn(attrName, jPath)) {
-        continue
-      }
-      let oldVal = matches[i][4];
-      let aName = this.options.attributeNamePrefix + attrName;
-      if (attrName.length) {
-        if (this.options.transformAttributeName) {
-          aName = this.options.transformAttributeName(aName);
-        }
-        if (aName === "__proto__") aName = "#__proto__";
+      const oldVal = matches[i][4];
 
-        if (oldVal !== undefined) {
-          if (this.options.trimValues) {
-            oldVal = oldVal.trim();
-          }
-          oldVal = this.replaceEntitiesValue(oldVal, tagName, jPath);
-          const newVal = this.options.attributeValueProcessor(attrName, oldVal, jPath);
+      if (attrName.length && oldVal !== undefined) {
+        let val = oldVal;
+        if (options.trimValues) val = val.trim();
+        val = this.replaceEntitiesValue(val, tagName, this.readonlyMatcher);
+        processedVals[i] = val;
+
+        rawAttrsForMatcher[attrName] = val;
+        hasRawAttrs = true;
+      }
+    }
+
+    // Update matcher ONCE before second pass, if applicable
+    if (hasRawAttrs && typeof jPath === 'object' && jPath.updateCurrent) {
+      jPath.updateCurrent(rawAttrsForMatcher);
+    }
+
+    // Hoist toString() once — path doesn't change during attribute processing
+    const jPathStr = options.jPath ? jPath.toString() : this.readonlyMatcher;
+
+    // Second pass: apply processors, build final attrs
+    let hasAttrs = false;
+    for (let i = 0; i < len; i++) {
+      const attrName = this.resolveNameSpace(matches[i][1]);
+
+      if (this.ignoreAttributesFn(attrName, jPathStr)) continue;
+
+      let aName = options.attributeNamePrefix + attrName;
+
+      if (attrName.length) {
+        if (options.transformAttributeName) {
+          aName = options.transformAttributeName(aName);
+        }
+        aName = sanitizeName(aName, options);
+
+        if (matches[i][4] !== undefined) {
+          // Reuse already-processed value — no double entity replacement
+          const oldVal = processedVals[i];
+
+          const newVal = options.attributeValueProcessor(attrName, oldVal, jPathStr);
           if (newVal === null || newVal === undefined) {
-            //don't parse
             attrs[aName] = oldVal;
           } else if (typeof newVal !== typeof oldVal || newVal !== oldVal) {
-            //overwrite
             attrs[aName] = newVal;
           } else {
-            //parse
-            attrs[aName] = parseValue(
-              oldVal,
-              this.options.parseAttributeValue,
-              this.options.numberParseOptions
-            );
+            attrs[aName] = parseValue(oldVal, options.parseAttributeValue, options.numberParseOptions);
           }
-        } else if (this.options.allowBooleanAttributes) {
+          hasAttrs = true;
+        } else if (options.allowBooleanAttributes) {
           attrs[aName] = true;
+          hasAttrs = true;
         }
       }
     }
-    if (!Object.keys(attrs).length) {
-      return;
-    }
-    if (this.options.attributesGroupName) {
+
+    if (!hasAttrs) return;
+
+    if (options.attributesGroupName && !options.preserveOrder) {
       const attrCollection = {};
-      attrCollection[this.options.attributesGroupName] = attrs;
+      attrCollection[options.attributesGroupName] = attrs;
       return attrCollection;
     }
-    return attrs
+    return attrs;
   }
 }
-
 const parseXml = function (xmlData) {
   xmlData = xmlData.replace(/\r\n?/g, "\n"); //TODO: remove this line
   const xmlObj = new XmlNode('!xml');
   let currentNode = xmlObj;
   let textData = "";
-  let jPath = "";
+
+  // Reset matcher for new document
+  this.matcher.reset();
+  this.entityDecoder.reset();
 
   // Reset entity expansion counters for this document
   this.entityExpansionCount = 0;
   this.currentExpandedLength = 0;
-
-  const docTypeReader = new DocTypeReader(this.options.processEntities);
-  for (let i = 0; i < xmlData.length; i++) {//for each char in XML data
+  const options = this.options;
+  const docTypeReader = new DocTypeReader(options.processEntities);
+  const xmlLen = xmlData.length;
+  for (let i = 0; i < xmlLen; i++) {//for each char in XML data
     const ch = xmlData[i];
     if (ch === '<') {
       // const nextIndex = i+1;
       // const _2ndChar = xmlData[nextIndex];
-      if (xmlData[i + 1] === '/') {//Closing Tag
+      const c1 = xmlData.charCodeAt(i + 1);
+      if (c1 === 47) {//Closing Tag '/'
         const closeIndex = findClosingIndex(xmlData, ">", i, "Closing Tag is not closed.");
         let tagName = xmlData.substring(i + 2, closeIndex).trim();
 
-        if (this.options.removeNSPrefix) {
+        if (options.removeNSPrefix) {
           const colonIndex = tagName.indexOf(":");
           if (colonIndex !== -1) {
             tagName = tagName.substr(colonIndex + 1);
           }
         }
 
-        if (this.options.transformTagName) {
-          tagName = this.options.transformTagName(tagName);
-        }
+        tagName = transformTagName(options.transformTagName, tagName, "", options).tagName;
 
         if (currentNode) {
-          textData = this.saveTextToParentTag(textData, currentNode, jPath);
+          textData = this.saveTextToParentTag(textData, currentNode, this.readonlyMatcher);
         }
 
         //check if last tag of nested tag was unpaired tag
-        const lastTagName = jPath.substring(jPath.lastIndexOf(".") + 1);
-        if (tagName && this.options.unpairedTags.indexOf(tagName) !== -1) {
+        const lastTagName = this.matcher.getCurrentTag();
+        if (tagName && options.unpairedTagsSet.has(tagName)) {
           throw new Error(`Unpaired tag can not be used as closing tag: </${tagName}>`);
         }
-        let propIndex = 0;
-        if (lastTagName && this.options.unpairedTags.indexOf(lastTagName) !== -1) {
-          propIndex = jPath.lastIndexOf('.', jPath.lastIndexOf('.') - 1);
+        if (lastTagName && options.unpairedTagsSet.has(lastTagName)) {
+          // Pop the unpaired tag
+          this.matcher.pop();
           this.tagsNodeStack.pop();
-        } else {
-          propIndex = jPath.lastIndexOf(".");
         }
-        jPath = jPath.substring(0, propIndex);
+        // Pop the closing tag
+        this.matcher.pop();
+        this.isCurrentNodeStopNode = false; // Reset flag when closing tag
 
         currentNode = this.tagsNodeStack.pop();//avoid recursion, set the parent tag scope
         textData = "";
         i = closeIndex;
-      } else if (xmlData[i + 1] === '?') {
+      } else if (c1 === 63) { //'?'
 
         let tagData = readTagExp(xmlData, i, false, "?>");
         if (!tagData) throw new Error("Pi Tag is not closed.");
 
-        textData = this.saveTextToParentTag(textData, currentNode, jPath);
-        if ((this.options.ignoreDeclaration && tagData.tagName === "?xml") || this.options.ignorePiTags) ; else {
+        textData = this.saveTextToParentTag(textData, currentNode, this.readonlyMatcher);
+        const attsMap = this.buildAttributesMap(tagData.tagExp, this.matcher, tagData.tagName, true);
+        if (attsMap) {
+          const ver = attsMap[this.options.attributeNamePrefix + "version"];
+          this.entityDecoder.setXmlVersion(Number(ver) || 1.0);
+          docTypeReader.setXmlVersion(Number(ver) || 1.0);
+        }
+        if ((options.ignoreDeclaration && tagData.tagName === "?xml") || options.ignorePiTags) ; else {
 
           const childNode = new XmlNode(tagData.tagName);
-          childNode.add(this.options.textNodeName, "");
+          childNode.add(options.textNodeName, "");
 
-          if (tagData.tagName !== tagData.tagExp && tagData.attrExpPresent) {
-            childNode[":@"] = this.buildAttributesMap(tagData.tagExp, jPath, tagData.tagName);
+          if (tagData.tagName !== tagData.tagExp && tagData.attrExpPresent && options.ignoreAttributes !== true) {
+            childNode[":@"] = attsMap;
           }
-          this.addChild(currentNode, childNode, jPath, i);
+          this.addChild(currentNode, childNode, this.readonlyMatcher, i);
         }
 
 
         i = tagData.closeIndex + 1;
-      } else if (xmlData.substr(i + 1, 3) === '!--') {
+      } else if (c1 === 33
+        && xmlData.charCodeAt(i + 2) === 45
+        && xmlData.charCodeAt(i + 3) === 45) { //'!--'
         const endIndex = findClosingIndex(xmlData, "-->", i + 4, "Comment is not closed.");
-        if (this.options.commentPropName) {
+        if (options.commentPropName) {
           const comment = xmlData.substring(i + 4, endIndex - 2);
 
-          textData = this.saveTextToParentTag(textData, currentNode, jPath);
+          textData = this.saveTextToParentTag(textData, currentNode, this.readonlyMatcher);
 
-          currentNode.add(this.options.commentPropName, [{ [this.options.textNodeName]: comment }]);
+          currentNode.add(options.commentPropName, [{ [options.textNodeName]: comment }]);
         }
         i = endIndex;
-      } else if (xmlData.substr(i + 1, 2) === '!D') {
+      } else if (c1 === 33
+        && xmlData.charCodeAt(i + 2) === 68) { //'!D'
         const result = docTypeReader.readDocType(xmlData, i);
-        this.docTypeEntities = result.entities;
+        this.entityDecoder.addInputEntities(result.entities);
         i = result.i;
-      } else if (xmlData.substr(i + 1, 2) === '![') {
+      } else if (c1 === 33
+        && xmlData.charCodeAt(i + 2) === 91) { // '!['
         const closeIndex = findClosingIndex(xmlData, "]]>", i, "CDATA is not closed.") - 2;
         const tagExp = xmlData.substring(i + 9, closeIndex);
 
-        textData = this.saveTextToParentTag(textData, currentNode, jPath);
+        textData = this.saveTextToParentTag(textData, currentNode, this.readonlyMatcher);
 
-        let val = this.parseTextData(tagExp, currentNode.tagname, jPath, true, false, true, true);
+        let val = this.parseTextData(tagExp, currentNode.tagname, this.readonlyMatcher, true, false, true, true);
         if (val == undefined) val = "";
 
         //cdata should be set even if it is 0 length string
-        if (this.options.cdataPropName) {
-          currentNode.add(this.options.cdataPropName, [{ [this.options.textNodeName]: tagExp }]);
+        if (options.cdataPropName) {
+          currentNode.add(options.cdataPropName, [{ [options.textNodeName]: tagExp }]);
         } else {
-          currentNode.add(this.options.textNodeName, val);
+          currentNode.add(options.textNodeName, val);
         }
 
         i = closeIndex + 2;
       } else {//Opening tag
-        let result = readTagExp(xmlData, i, this.options.removeNSPrefix);
+        let result = readTagExp(xmlData, i, options.removeNSPrefix);
+
+        // Safety check: readTagExp can return undefined
+        if (!result) {
+          // Log context for debugging
+          const context = xmlData.substring(Math.max(0, i - 50), Math.min(xmlLen, i + 50));
+          throw new Error(`readTagExp returned undefined at position ${i}. Context: "${context}"`);
+        }
+
         let tagName = result.tagName;
         const rawTagName = result.rawTagName;
         let tagExp = result.tagExp;
         let attrExpPresent = result.attrExpPresent;
         let closeIndex = result.closeIndex;
 
-        if (this.options.transformTagName) {
-          //console.log(tagExp, tagName)
-          const newTagName = this.options.transformTagName(tagName);
-          if (tagExp === tagName) {
-            tagExp = newTagName;
-          }
-          tagName = newTagName;
-        }
+        ({ tagName, tagExp } = transformTagName(options.transformTagName, tagName, tagExp, options));
 
-        if (this.options.strictReservedNames &&
-          (tagName === this.options.commentPropName
-            || tagName === this.options.cdataPropName
+        if (options.strictReservedNames &&
+          (tagName === options.commentPropName
+            || tagName === options.cdataPropName
+            || tagName === options.textNodeName
+            || tagName === options.attributesGroupName
           )) {
           throw new Error(`Invalid tag name: ${tagName}`);
         }
@@ -44767,36 +49667,73 @@ const parseXml = function (xmlData) {
         if (currentNode && textData) {
           if (currentNode.tagname !== '!xml') {
             //when nested tag is found
-            textData = this.saveTextToParentTag(textData, currentNode, jPath, false);
+            textData = this.saveTextToParentTag(textData, currentNode, this.readonlyMatcher, false);
           }
         }
 
         //check if last tag was unpaired tag
         const lastTag = currentNode;
-        if (lastTag && this.options.unpairedTags.indexOf(lastTag.tagname) !== -1) {
+        if (lastTag && options.unpairedTagsSet.has(lastTag.tagname)) {
           currentNode = this.tagsNodeStack.pop();
-          jPath = jPath.substring(0, jPath.lastIndexOf("."));
+          this.matcher.pop();
         }
+
+        // Clean up self-closing syntax BEFORE processing attributes
+        // This is where tagExp gets the trailing / removed
+        let isSelfClosing = false;
+        if (tagExp.length > 0 && tagExp.lastIndexOf("/") === tagExp.length - 1) {
+          isSelfClosing = true;
+          if (tagName[tagName.length - 1] === "/") {
+            tagName = tagName.substr(0, tagName.length - 1);
+            tagExp = tagName;
+          } else {
+            tagExp = tagExp.substr(0, tagExp.length - 1);
+          }
+
+          // Re-check attrExpPresent after cleaning
+          attrExpPresent = (tagName !== tagExp);
+        }
+
+        // Now process attributes with CLEAN tagExp (no trailing /)
+        let prefixedAttrs = null;
+        let namespace = undefined;
+
+        // Extract namespace from rawTagName
+        namespace = extractNamespace(rawTagName);
+
+        // Push tag to matcher FIRST (with empty attrs for now) so callbacks see correct path
         if (tagName !== xmlObj.tagname) {
-          jPath += jPath ? "." + tagName : tagName;
+          this.matcher.push(tagName, {}, namespace);
         }
+
+        // Now build attributes - callbacks will see correct matcher state
+        if (tagName !== tagExp && attrExpPresent) {
+          // Build attributes (returns prefixed attributes for the tree)
+          // Note: buildAttributesMap now internally updates the matcher with raw attributes
+          prefixedAttrs = this.buildAttributesMap(tagExp, this.matcher, tagName);
+
+          if (prefixedAttrs) {
+            // Extract raw attributes (without prefix) for our use
+            //TODO: seems a performance overhead
+            extractRawAttributes(prefixedAttrs, options);
+          }
+        }
+
+        // Now check if this is a stop node (after attributes are set)
+        if (tagName !== xmlObj.tagname) {
+          this.isCurrentNodeStopNode = this.isItStopNode();
+        }
+
         const startIndex = i;
-        if (this.isItStopNode(this.stopNodesExact, this.stopNodesWildcard, jPath, tagName)) {
+        if (this.isCurrentNodeStopNode) {
           let tagContent = "";
-          //self-closing tag
-          if (tagExp.length > 0 && tagExp.lastIndexOf("/") === tagExp.length - 1) {
-            if (tagName[tagName.length - 1] === "/") { //remove trailing '/'
-              tagName = tagName.substr(0, tagName.length - 1);
-              jPath = jPath.substr(0, jPath.length - 1);
-              tagExp = tagName;
-            } else {
-              tagExp = tagExp.substr(0, tagExp.length - 1);
-            }
+
+          // For self-closing tags, content is empty
+          if (isSelfClosing) {
             i = result.closeIndex;
           }
           //unpaired tag
-          else if (this.options.unpairedTags.indexOf(tagName) !== -1) {
-
+          else if (options.unpairedTagsSet.has(tagName)) {
             i = result.closeIndex;
           }
           //normal tag
@@ -44810,50 +49747,38 @@ const parseXml = function (xmlData) {
 
           const childNode = new XmlNode(tagName);
 
-          if (tagName !== tagExp && attrExpPresent) {
-            childNode[":@"] = this.buildAttributesMap(tagExp, jPath, tagName);
-          }
-          if (tagContent) {
-            tagContent = this.parseTextData(tagContent, tagName, jPath, true, attrExpPresent, true, true);
+          if (prefixedAttrs) {
+            childNode[":@"] = prefixedAttrs;
           }
 
-          jPath = jPath.substr(0, jPath.lastIndexOf("."));
-          childNode.add(this.options.textNodeName, tagContent);
+          // For stop nodes, store raw content as-is without any processing
+          childNode.add(options.textNodeName, tagContent);
 
-          this.addChild(currentNode, childNode, jPath, startIndex);
+          this.matcher.pop(); // Pop the stop node tag
+          this.isCurrentNodeStopNode = false; // Reset flag
+
+          this.addChild(currentNode, childNode, this.readonlyMatcher, startIndex);
         } else {
           //selfClosing tag
-          if (tagExp.length > 0 && tagExp.lastIndexOf("/") === tagExp.length - 1) {
-            if (tagName[tagName.length - 1] === "/") { //remove trailing '/'
-              tagName = tagName.substr(0, tagName.length - 1);
-              jPath = jPath.substr(0, jPath.length - 1);
-              tagExp = tagName;
-            } else {
-              tagExp = tagExp.substr(0, tagExp.length - 1);
-            }
-
-            if (this.options.transformTagName) {
-              const newTagName = this.options.transformTagName(tagName);
-              if (tagExp === tagName) {
-                tagExp = newTagName;
-              }
-              tagName = newTagName;
-            }
+          if (isSelfClosing) {
+            ({ tagName, tagExp } = transformTagName(options.transformTagName, tagName, tagExp, options));
 
             const childNode = new XmlNode(tagName);
-            if (tagName !== tagExp && attrExpPresent) {
-              childNode[":@"] = this.buildAttributesMap(tagExp, jPath, tagName);
+            if (prefixedAttrs) {
+              childNode[":@"] = prefixedAttrs;
             }
-            this.addChild(currentNode, childNode, jPath, startIndex);
-            jPath = jPath.substr(0, jPath.lastIndexOf("."));
+            this.addChild(currentNode, childNode, this.readonlyMatcher, startIndex);
+            this.matcher.pop(); // Pop self-closing tag
+            this.isCurrentNodeStopNode = false; // Reset flag
           }
-          else if(this.options.unpairedTags.indexOf(tagName) !== -1){//unpaired tag
+          else if (options.unpairedTagsSet.has(tagName)) {//unpaired tag
             const childNode = new XmlNode(tagName);
-            if(tagName !== tagExp && attrExpPresent){
-              childNode[":@"] = this.buildAttributesMap(tagExp, jPath);
+            if (prefixedAttrs) {
+              childNode[":@"] = prefixedAttrs;
             }
-            this.addChild(currentNode, childNode, jPath, startIndex);
-            jPath = jPath.substr(0, jPath.lastIndexOf("."));
+            this.addChild(currentNode, childNode, this.readonlyMatcher, startIndex);
+            this.matcher.pop(); // Pop unpaired tag
+            this.isCurrentNodeStopNode = false; // Reset flag
             i = result.closeIndex;
             // Continue to next iteration without changing currentNode
             continue;
@@ -44861,15 +49786,15 @@ const parseXml = function (xmlData) {
           //opening tag
           else {
             const childNode = new XmlNode(tagName);
-            if (this.tagsNodeStack.length > this.options.maxNestedTags) {
+            if (this.tagsNodeStack.length > options.maxNestedTags) {
               throw new Error("Maximum nested tags exceeded");
             }
             this.tagsNodeStack.push(currentNode);
 
-            if (tagName !== tagExp && attrExpPresent) {
-              childNode[":@"] = this.buildAttributesMap(tagExp, jPath, tagName);
+            if (prefixedAttrs) {
+              childNode[":@"] = prefixedAttrs;
             }
-            this.addChild(currentNode, childNode, jPath, startIndex);
+            this.addChild(currentNode, childNode, this.readonlyMatcher, startIndex);
             currentNode = childNode;
           }
           textData = "";
@@ -44883,10 +49808,13 @@ const parseXml = function (xmlData) {
   return xmlObj.child;
 };
 
-function addChild(currentNode, childNode, jPath, startIndex) {
+function addChild(currentNode, childNode, matcher, startIndex) {
   // unset startIndex if not requested
   if (!this.options.captureMetaData) startIndex = undefined;
-  const result = this.options.updateTag(childNode.tagname, jPath, childNode[":@"]);
+
+  // Pass jPath string or matcher based on options.jPath setting
+  const jPathOrMatcher = this.options.jPath ? matcher.toString() : matcher;
+  const result = this.options.updateTag(childNode.tagname, jPathOrMatcher, childNode[":@"]);
   if (result === false) ; else if (typeof result === "string") {
     childNode.tagname = result;
     currentNode.addChild(childNode, startIndex);
@@ -44895,95 +49823,49 @@ function addChild(currentNode, childNode, jPath, startIndex) {
   }
 }
 
-const replaceEntitiesValue$1 = function (val, tagName, jPath) {
-  // Performance optimization: Early return if no entities to replace
-  if (val.indexOf('&') === -1) {
-    return val;
-  }
-
+/**
+ * @param {object} val - Entity object with regex and val properties
+ * @param {string} tagName - Tag name
+ * @param {string|Matcher} jPath - jPath string or Matcher instance based on options.jPath
+ */
+function replaceEntitiesValue$1(val, tagName, jPath) {
   const entityConfig = this.options.processEntities;
 
-  if (!entityConfig.enabled) {
+  if (!entityConfig || !entityConfig.enabled) {
     return val;
   }
 
-  // Check tag-specific filtering
+  // Check if tag is allowed to contain entities
   if (entityConfig.allowedTags) {
-    if (!entityConfig.allowedTags.includes(tagName)) {
-      return val; // Skip entity replacement for current tag as not set
+    const jPathOrMatcher = this.options.jPath ? jPath.toString() : jPath;
+    const allowed = Array.isArray(entityConfig.allowedTags)
+      ? entityConfig.allowedTags.includes(tagName)
+      : entityConfig.allowedTags(tagName, jPathOrMatcher);
+
+    if (!allowed) {
+      return val;
     }
   }
 
+  // Apply custom tag filter if provided
   if (entityConfig.tagFilter) {
-    if (!entityConfig.tagFilter(tagName, jPath)) {
+    const jPathOrMatcher = this.options.jPath ? jPath.toString() : jPath;
+    if (!entityConfig.tagFilter(tagName, jPathOrMatcher)) {
       return val; // Skip based on custom filter
     }
   }
 
-  // Replace DOCTYPE entities
-  for (let entityName in this.docTypeEntities) {
-    const entity = this.docTypeEntities[entityName];
-    const matches = val.match(entity.regx);
-
-    if (matches) {
-      // Track expansions
-      this.entityExpansionCount += matches.length;
-
-      // Check expansion limit
-      if (entityConfig.maxTotalExpansions &&
-        this.entityExpansionCount > entityConfig.maxTotalExpansions) {
-        throw new Error(
-          `Entity expansion limit exceeded: ${this.entityExpansionCount} > ${entityConfig.maxTotalExpansions}`
-        );
-      }
-
-      // Store length before replacement
-      const lengthBefore = val.length;
-      val = val.replace(entity.regx, entity.val);
-
-      // Check expanded length immediately after replacement
-      if (entityConfig.maxExpandedLength) {
-        this.currentExpandedLength += (val.length - lengthBefore);
-
-        if (this.currentExpandedLength > entityConfig.maxExpandedLength) {
-          throw new Error(
-            `Total expanded content size exceeded: ${this.currentExpandedLength} > ${entityConfig.maxExpandedLength}`
-          );
-        }
-      }
-    }
-  }
-  if (val.indexOf('&') === -1) return val;  // Early exit
-
-  // Replace standard entities
-  for (let entityName in this.lastEntities) {
-    const entity = this.lastEntities[entityName];
-    val = val.replace(entity.regex, entity.val);
-  }
-  if (val.indexOf('&') === -1) return val;  // Early exit
-
-  // Replace HTML entities if enabled
-  if (this.options.htmlEntities) {
-    for (let entityName in this.htmlEntities) {
-      const entity = this.htmlEntities[entityName];
-      val = val.replace(entity.regex, entity.val);
-    }
-  }
-
-  // Replace ampersand entity last
-  val = val.replace(this.ampEntity.regex, this.ampEntity.val);
-
-  return val;
-};
+  return this.entityDecoder.decode(val);
+}
 
 
-function saveTextToParentTag(textData, parentNode, jPath, isLeafNode) {
+function saveTextToParentTag(textData, parentNode, matcher, isLeafNode) {
   if (textData) { //store previously collected data as textNode
     if (isLeafNode === undefined) isLeafNode = parentNode.child.length === 0;
 
     textData = this.parseTextData(textData,
       parentNode.tagname,
-      jPath,
+      matcher,
       false,
       parentNode[":@"] ? Object.keys(parentNode[":@"]).length !== 0 : false,
       isLeafNode);
@@ -44995,17 +49877,14 @@ function saveTextToParentTag(textData, parentNode, jPath, isLeafNode) {
   return textData;
 }
 
-//TODO: use jPath to simplify the logic
 /**
- * @param {Set} stopNodesExact
- * @param {Set} stopNodesWildcard
- * @param {string} jPath
- * @param {string} currentTagName
+ * @param {Array<Expression>} stopNodeExpressions - Array of compiled Expression objects
+ * @param {Matcher} matcher - Current path matcher
  */
-function isItStopNode(stopNodesExact, stopNodesWildcard, jPath, currentTagName) {
-  if (stopNodesWildcard && stopNodesWildcard.has(currentTagName)) return true;
-  if (stopNodesExact && stopNodesExact.has(jPath)) return true;
-  return false;
+function isItStopNode() {
+  if (this.stopNodeExpressionsSet.size === 0) return false;
+
+  return this.matcher.matchesAny(this.stopNodeExpressionsSet);
 }
 
 /**
@@ -45015,32 +49894,38 @@ function isItStopNode(stopNodesExact, stopNodesWildcard, jPath, currentTagName) 
  * @returns 
  */
 function tagExpWithClosingIndex(xmlData, i, closingChar = ">") {
-  let attrBoundary;
-  let tagExp = "";
-  for (let index = i; index < xmlData.length; index++) {
-    let ch = xmlData[index];
+  //TODO: ignore boolean attributes in tag expression
+  //TODO: if ignore attributes, dont read full attribute expression but the end. But read for xml declaration
+  let attrBoundary = 0;
+  const len = xmlData.length;
+  const closeCode0 = closingChar.charCodeAt(0);
+  const closeCode1 = closingChar.length > 1 ? closingChar.charCodeAt(1) : -1;
+
+  let result = '';
+  let segmentStart = i;
+
+  for (let index = i; index < len; index++) {
+    const code = xmlData.charCodeAt(index);
+
     if (attrBoundary) {
-      if (ch === attrBoundary) attrBoundary = "";//reset
-    } else if (ch === '"' || ch === "'") {
-      attrBoundary = ch;
-    } else if (ch === closingChar[0]) {
-      if (closingChar[1]) {
-        if (xmlData[index + 1] === closingChar[1]) {
-          return {
-            data: tagExp,
-            index: index
-          }
+      if (code === attrBoundary) attrBoundary = 0;
+    } else if (code === 34 || code === 39) { // " or '
+      attrBoundary = code;
+    } else if (code === closeCode0) {
+      if (closeCode1 !== -1) {
+        if (xmlData.charCodeAt(index + 1) === closeCode1) {
+          result += xmlData.substring(segmentStart, index);
+          return { data: result, index };
         }
       } else {
-        return {
-          data: tagExp,
-          index: index
-        }
+        result += xmlData.substring(segmentStart, index);
+        return { data: result, index };
       }
-    } else if (ch === '\t') {
-      ch = " ";
+    } else if (code === 9 && !attrBoundary) { // \t - only replace with space outside attribute values
+      // Flush accumulated segment, add space, start new segment
+      result += xmlData.substring(segmentStart, index) + ' ';
+      segmentStart = index + 1;
     }
-    tagExp += ch;
   }
 }
 
@@ -45051,6 +49936,12 @@ function findClosingIndex(xmlData, str, i, errMsg) {
   } else {
     return closingIndex + str.length - 1;
   }
+}
+
+function findClosingChar(xmlData, char, i, errMsg) {
+  const closingIndex = xmlData.indexOf(char, i);
+  if (closingIndex === -1) throw new Error(errMsg);
+  return closingIndex; // no offset needed
 }
 
 function readTagExp(xmlData, i, removeNSPrefix, closingChar = ">") {
@@ -45094,10 +49985,12 @@ function readStopNodeData(xmlData, tagName, i) {
   // Starting at 1 since we already have an open tag
   let openTagCount = 1;
 
-  for (; i < xmlData.length; i++) {
+  const xmllen = xmlData.length;
+  for (; i < xmllen; i++) {
     if (xmlData[i] === "<") {
-      if (xmlData[i + 1] === "/") {//close tag
-        const closeIndex = findClosingIndex(xmlData, ">", i, `${tagName} is not closed`);
+      const c1 = xmlData.charCodeAt(i + 1);
+      if (c1 === 47) {//close tag '/'
+        const closeIndex = findClosingChar(xmlData, ">", i, `${tagName} is not closed`);
         let closeTagName = xmlData.substring(i + 2, closeIndex).trim();
         if (closeTagName === tagName) {
           openTagCount--;
@@ -45109,17 +50002,20 @@ function readStopNodeData(xmlData, tagName, i) {
           }
         }
         i = closeIndex;
-      } else if (xmlData[i + 1] === '?') {
+      } else if (c1 === 63) { //?
         const closeIndex = findClosingIndex(xmlData, "?>", i + 1, "StopNode is not closed.");
         i = closeIndex;
-      } else if (xmlData.substr(i + 1, 3) === '!--') {
+      } else if (c1 === 33
+        && xmlData.charCodeAt(i + 2) === 45
+        && xmlData.charCodeAt(i + 3) === 45) { // '!--'
         const closeIndex = findClosingIndex(xmlData, "-->", i + 3, "StopNode is not closed.");
         i = closeIndex;
-      } else if (xmlData.substr(i + 1, 2) === '![') {
+      } else if (c1 === 33
+        && xmlData.charCodeAt(i + 2) === 91) { // '!['
         const closeIndex = findClosingIndex(xmlData, "]]>", i, "StopNode is not closed.") - 2;
         i = closeIndex;
       } else {
-        const tagData = readTagExp(xmlData, i, '>');
+        const tagData = readTagExp(xmlData, i, false);
 
         if (tagData) {
           const openTagName = tagData && tagData.tagName;
@@ -45149,44 +50045,86 @@ function parseValue(val, shouldParse, options) {
   }
 }
 
-function fromCodePoint(str, base, prefix) {
-  const codePoint = Number.parseInt(str, base);
-
-  if (codePoint >= 0 && codePoint <= 0x10FFFF) {
-    return String.fromCodePoint(codePoint);
-  } else {
-    return prefix + str + ";";
+function transformTagName(fn, tagName, tagExp, options) {
+  if (fn) {
+    const newTagName = fn(tagName);
+    if (tagExp === tagName) {
+      tagExp = newTagName;
+    }
+    tagName = newTagName;
   }
+  tagName = sanitizeName(tagName, options);
+  return { tagName, tagExp };
+}
+
+
+
+function sanitizeName(name, options) {
+  if (criticalProperties.includes(name)) {
+    throw new Error(`[SECURITY] Invalid name: "${name}" is a reserved JavaScript keyword that could cause prototype pollution`);
+  } else if (DANGEROUS_PROPERTY_NAMES.includes(name)) {
+    return options.onDangerousProperty(name);
+  }
+  return name;
 }
 
 const METADATA_SYMBOL = XmlNode.getMetaDataSymbol();
 
 /**
- * 
- * @param {array} node 
- * @param {any} options 
- * @returns 
+ * Helper function to strip attribute prefix from attribute map
+ * @param {object} attrs - Attributes with prefix (e.g., {"@_class": "code"})
+ * @param {string} prefix - Attribute prefix to remove (e.g., "@_")
+ * @returns {object} Attributes without prefix (e.g., {"class": "code"})
  */
-function prettify(node, options) {
-  return compress(node, options);
+function stripAttributePrefix(attrs, prefix) {
+  if (!attrs || typeof attrs !== 'object') return {};
+  if (!prefix) return attrs;
+
+  const rawAttrs = {};
+  for (const key in attrs) {
+    if (key.startsWith(prefix)) {
+      const rawName = key.substring(prefix.length);
+      rawAttrs[rawName] = attrs[key];
+    } else {
+      // Attribute without prefix (shouldn't normally happen, but be safe)
+      rawAttrs[key] = attrs[key];
+    }
+  }
+  return rawAttrs;
 }
 
 /**
  * 
+ * @param {array} node 
+ * @param {any} options 
+ * @param {Matcher} matcher - Path matcher instance
+ * @returns 
+ */
+function prettify(node, options, matcher, readonlyMatcher) {
+  return compress(node, options, matcher, readonlyMatcher);
+}
+
+/**
  * @param {array} arr 
  * @param {object} options 
- * @param {string} jPath 
+ * @param {Matcher} matcher - Path matcher instance
  * @returns object
  */
-function compress(arr, options, jPath) {
+function compress(arr, options, matcher, readonlyMatcher) {
   let text;
   const compressedObj = {}; //This is intended to be a plain object
   for (let i = 0; i < arr.length; i++) {
     const tagObj = arr[i];
     const property = propName$1(tagObj);
-    let newJpath = "";
-    if (jPath === undefined) newJpath = property;
-    else newJpath = jPath + "." + property;
+
+    // Push current property to matcher WITH RAW ATTRIBUTES (no prefix)
+    if (property !== undefined && property !== options.textNodeName) {
+      const rawAttrs = stripAttributePrefix(
+        tagObj[":@"] || {},
+        options.attributeNamePrefix
+      );
+      matcher.push(property, rawAttrs);
+    }
 
     if (property === options.textNodeName) {
       if (text === undefined) text = tagObj[property];
@@ -45195,11 +50133,15 @@ function compress(arr, options, jPath) {
       continue;
     } else if (tagObj[property]) {
 
-      let val = compress(tagObj[property], options, newJpath);
+      let val = compress(tagObj[property], options, matcher, readonlyMatcher);
       const isLeaf = isLeafTag(val, options);
 
+      if (Object.keys(val).length === 0 && options.alwaysCreateTextNode) {
+        val[options.textNodeName] = "";
+      }
+
       if (tagObj[":@"]) {
-        assignAttributes(val, tagObj[":@"], newJpath, options);
+        assignAttributes(val, tagObj[":@"], readonlyMatcher, options);
       } else if (Object.keys(val).length === 1 && val[options.textNodeName] !== undefined && !options.alwaysCreateTextNode) {
         val = val[options.textNodeName];
       } else if (Object.keys(val).length === 0) {
@@ -45220,11 +50162,19 @@ function compress(arr, options, jPath) {
       } else {
         //TODO: if a node is not an array, then check if it should be an array
         //also determine if it is a leaf node
-        if (options.isArray(property, newJpath, isLeaf)) {
+
+        // Pass jPath string or readonlyMatcher based on options.jPath setting
+        const jPathOrMatcher = options.jPath ? readonlyMatcher.toString() : readonlyMatcher;
+        if (options.isArray(property, jPathOrMatcher, isLeaf)) {
           compressedObj[property] = [val];
         } else {
           compressedObj[property] = val;
         }
+      }
+
+      // Pop property from matcher after processing
+      if (property !== undefined && property !== options.textNodeName) {
+        matcher.pop();
       }
     }
 
@@ -45246,13 +50196,25 @@ function propName$1(obj) {
   }
 }
 
-function assignAttributes(obj, attrMap, jpath, options) {
+function assignAttributes(obj, attrMap, readonlyMatcher, options) {
   if (attrMap) {
     const keys = Object.keys(attrMap);
     const len = keys.length; //don't make it inline
     for (let i = 0; i < len; i++) {
-      const atrrName = keys[i];
-      if (options.isArray(atrrName, jpath + "." + atrrName, true, true)) {
+      const atrrName = keys[i];  // This is the PREFIXED name (e.g., "@_class")
+
+      // Strip prefix for matcher path (for isArray callback)
+      const rawAttrName = atrrName.startsWith(options.attributeNamePrefix)
+        ? atrrName.substring(options.attributeNamePrefix.length)
+        : atrrName;
+
+      // For attributes, we need to create a temporary path
+      // Pass jPath string or matcher based on options.jPath setting
+      const jPathOrMatcher = options.jPath
+        ? readonlyMatcher.toString() + "." + rawAttrName
+        : readonlyMatcher;
+
+      if (options.isArray(atrrName, jPathOrMatcher, true, true)) {
         obj[atrrName] = [attrMap[atrrName]];
       } else {
         obj[atrrName] = attrMap[atrrName];
@@ -45306,11 +50268,11 @@ class XMLParser {
                 throw Error(`${result.err.msg}:${result.err.line}:${result.err.col}`)
             }
         }
-        const orderedObjParser = new OrderedObjParser(this.options);
-        orderedObjParser.addExternalEntities(this.externalEntities);
+        const orderedObjParser = new OrderedObjParser(this.options, this.externalEntities);
+        // orderedObjParser.entityDecoder.setExternalEntities(this.externalEntities);
         const orderedResult = orderedObjParser.parseXml(xmlData);
         if (this.options.preserveOrder || orderedResult === undefined) return orderedResult;
-        else return prettify(orderedResult, this.options);
+        else return prettify(orderedResult, this.options, orderedObjParser.matcher, orderedObjParser.readonlyMatcher);
     }
 
     /**
@@ -45345,26 +50307,103 @@ class XMLParser {
     }
 }
 
+function safeComment(val) {
+  return String(val)
+    .replace(/--/g, '- -')   // -- is illegal anywhere in comment content
+    .replace(/--/g, '- -')   // handle the scenario when 2 consiucative dashes appears 
+    .replace(/-$/, '- ');    // trailing - would form -- with the closing -->
+}
+
+function safeCdata(val) {
+  return String(val).replace(/\]\]>/g, ']]]]><![CDATA[>')
+}
+
+function escapeAttribute(val) {
+  return String(val).replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+}
+
 const EOL = "\n";
 
 /**
- * 
- * @param {array} jArray 
- * @param {any} options 
- * @returns 
+ * Detect XML version from the first element of the ordered array input.
+ * The first element must be a ?xml processing instruction with a version attribute.
+ * Returns '1.0' if not found.
+ *
+ * @param {array}  jArray
+ * @param {object} options
+ */
+function detectXmlVersionFromArray(jArray, options) {
+    if (!Array.isArray(jArray) || jArray.length === 0) return '1.0';
+    const first = jArray[0];
+    const firstKey = propName(first);
+    if (firstKey === '?xml') {
+        const attrs = first[':@'];
+        if (attrs) {
+            const versionKey = options.attributeNamePrefix + 'version';
+            if (attrs[versionKey]) return attrs[versionKey];
+        }
+    }
+    return '1.0';
+}
+
+/**
+ * Resolve a tag or attribute name through sanitizeName if configured.
+ * Validation via xml-naming's qName is performed first; the sanitizeName
+ * callback is invoked only when the name is invalid. If sanitizeName is
+ * false (default), no validation occurs and the name is used as-is.
+ *
+ * @param {string}  name        - raw name from the JS object
+ * @param {boolean} isAttribute - true when resolving an attribute name
+ * @param {object}  options
+ * @param {Matcher} matcher     - current matcher state (readonly from callback perspective)
+ * @param {string}  xmlVersion  - '1.0' or '1.1', forwarded to xml-naming
+ */
+function resolveTagName$1(name, isAttribute, options, matcher, xmlVersion) {
+    if (!options.sanitizeName) return name;
+    if (qName(name, { xmlVersion })) return name;
+    return options.sanitizeName(name, { isAttribute, matcher: matcher.readOnly() });
+}
+
+/**
+ * @param {array} jArray
+ * @param {any} options
+ * @returns
  */
 function toXml(jArray, options) {
     let indentation = "";
-    if (options.format && options.indentBy.length > 0) {
+    if (options.format) {
         indentation = EOL;
     }
-    return arrToStr(jArray, options, "", indentation);
+
+    // Pre-compile stopNode expressions for pattern matching
+    const stopNodeExpressions = [];
+    if (options.stopNodes && Array.isArray(options.stopNodes)) {
+        for (let i = 0; i < options.stopNodes.length; i++) {
+            const node = options.stopNodes[i];
+            if (typeof node === 'string') {
+                stopNodeExpressions.push(new Expression(node));
+            } else if (node instanceof Expression) {
+                stopNodeExpressions.push(node);
+            }
+        }
+    }
+
+    // Detect XML version for use in name validation
+    const xmlVersion = detectXmlVersionFromArray(jArray, options);
+
+    // Initialize matcher for path tracking
+    const matcher = new Matcher();
+
+    return arrToStr(jArray, options, indentation, matcher, stopNodeExpressions, xmlVersion);
 }
 
-function arrToStr(arr, options, jPath, indentation) {
+function arrToStr(arr, options, indentation, matcher, stopNodeExpressions, xmlVersion) {
     let xmlStr = "";
     let isPreviousElementTag = false;
 
+    if (options.maxNestedTags && matcher.getDepth() > options.maxNestedTags) {
+        throw new Error("Maximum nested tags exceeded");
+    }
 
     if (!Array.isArray(arr)) {
         // Non-array values (e.g. string tag values) should be treated as text content
@@ -45378,16 +50417,33 @@ function arrToStr(arr, options, jPath, indentation) {
 
     for (let i = 0; i < arr.length; i++) {
         const tagObj = arr[i];
-        const tagName = propName(tagObj);
-        if (tagName === undefined) continue;
+        const rawTagName = propName(tagObj);
+        if (rawTagName === undefined) continue;
 
-        let newJPath = "";
-        if (jPath.length === 0) newJPath = tagName;
-        else newJPath = `${jPath}.${tagName}`;
+        // Special names are exempt from sanitizeName: internal conventions and PI tags
+        // are not user-supplied XML element names.
+        const isSpecialName = rawTagName === options.textNodeName
+            || rawTagName === options.cdataPropName
+            || rawTagName === options.commentPropName
+            || rawTagName[0] === '?';
+
+        // Resolve tag name (may transform it; may throw for invalid names)
+        const tagName = isSpecialName
+            ? rawTagName
+            : resolveTagName$1(rawTagName, false, options, matcher, xmlVersion);
+
+        // Extract attributes from ":@" property
+        const attrValues = extractAttributeValues(tagObj[":@"], options);
+
+        // Push resolved tag to matcher WITH attributes
+        matcher.push(tagName, attrValues);
+
+        // Check if this is a stop node using Expression matching
+        const isStopNode = checkStopNode(matcher, stopNodeExpressions);
 
         if (tagName === options.textNodeName) {
-            let tagText = tagObj[tagName];
-            if (!isStopNode(newJPath, options)) {
+            let tagText = tagObj[rawTagName];
+            if (!isStopNode) {
                 tagText = options.tagValueProcessor(tagName, tagText);
                 tagText = replaceEntitiesValue(tagText, options);
             }
@@ -45396,34 +50452,53 @@ function arrToStr(arr, options, jPath, indentation) {
             }
             xmlStr += tagText;
             isPreviousElementTag = false;
+            matcher.pop();
             continue;
         } else if (tagName === options.cdataPropName) {
             if (isPreviousElementTag) {
                 xmlStr += indentation;
             }
-            xmlStr += `<![CDATA[${tagObj[tagName][0][options.textNodeName]}]]>`;
+            const val = tagObj[rawTagName][0][options.textNodeName];
+            const safeVal = safeCdata(val);
+            xmlStr += `<![CDATA[${safeVal}]]>`;
             isPreviousElementTag = false;
+            matcher.pop();
             continue;
         } else if (tagName === options.commentPropName) {
-            xmlStr += indentation + `<!--${tagObj[tagName][0][options.textNodeName]}-->`;
+            const val = tagObj[rawTagName][0][options.textNodeName];
+            const safeVal = safeComment(val);
+            xmlStr += indentation + `<!--${safeVal}-->`;
             isPreviousElementTag = true;
+            matcher.pop();
             continue;
         } else if (tagName[0] === "?") {
-            const attStr = attr_to_str(tagObj[":@"], options);
+            const attStr = attr_to_str(tagObj[":@"], options, isStopNode, matcher, xmlVersion);
             const tempInd = tagName === "?xml" ? "" : indentation;
-            let piTextNodeName = tagObj[tagName][0][options.textNodeName];
-            piTextNodeName = piTextNodeName.length !== 0 ? " " + piTextNodeName : ""; //remove extra spacing
-            xmlStr += tempInd + `<${tagName}${piTextNodeName}${attStr}?>`;
+            // Text node content on PI/XML declaration tags is intentionally ignored.
+            // Only attributes are valid on these tags per the XML spec.
+            xmlStr += tempInd + `<${tagName}${attStr}?>`;
             isPreviousElementTag = true;
+            matcher.pop();
             continue;
         }
+
         let newIdentation = indentation;
         if (newIdentation !== "") {
             newIdentation += options.indentBy;
         }
-        const attStr = attr_to_str(tagObj[":@"], options);
+
+        // Pass isStopNode to attr_to_str so attributes are also not processed for stopNodes
+        const attStr = attr_to_str(tagObj[":@"], options, isStopNode, matcher, xmlVersion);
         const tagStart = indentation + `<${tagName}${attStr}`;
-        const tagValue = arrToStr(tagObj[tagName], options, newJPath, newIdentation);
+
+        // If this is a stopNode, get raw content without processing
+        let tagValue;
+        if (isStopNode) {
+            tagValue = getRawContent(tagObj[rawTagName], options);
+        } else {
+            tagValue = arrToStr(tagObj[rawTagName], options, newIdentation, matcher, stopNodeExpressions, xmlVersion);
+        }
+
         if (options.unpairedTags.indexOf(tagName) !== -1) {
             if (options.suppressUnpairedNode) xmlStr += tagStart + ">";
             else xmlStr += tagStart + "/>";
@@ -45441,9 +50516,100 @@ function arrToStr(arr, options, jPath, indentation) {
             xmlStr += `</${tagName}>`;
         }
         isPreviousElementTag = true;
+
+        // Pop tag from matcher
+        matcher.pop();
     }
 
     return xmlStr;
+}
+
+/**
+ * Extract attribute values from the ":@" object and return as plain object
+ * for passing to matcher.push()
+ */
+function extractAttributeValues(attrMap, options) {
+    if (!attrMap || options.ignoreAttributes) return null;
+
+    const attrValues = {};
+    let hasAttrs = false;
+
+    for (let attr in attrMap) {
+        if (!Object.prototype.hasOwnProperty.call(attrMap, attr)) continue;
+        // Remove the attribute prefix to get clean attribute name
+        const cleanAttrName = attr.startsWith(options.attributeNamePrefix)
+            ? attr.substr(options.attributeNamePrefix.length)
+            : attr;
+        attrValues[cleanAttrName] = escapeAttribute(attrMap[attr]);
+        hasAttrs = true;
+    }
+
+    return hasAttrs ? attrValues : null;
+}
+
+/**
+ * Extract raw content from a stopNode without any processing
+ * This preserves the content exactly as-is, including special characters
+ */
+function getRawContent(arr, options) {
+    if (!Array.isArray(arr)) {
+        // Non-array values return as-is
+        if (arr !== undefined && arr !== null) {
+            return arr.toString();
+        }
+        return "";
+    }
+
+    let content = "";
+    for (let i = 0; i < arr.length; i++) {
+        const item = arr[i];
+        const tagName = propName(item);
+
+        if (tagName === options.textNodeName) {
+            // Raw text content - NO processing, NO entity replacement
+            content += item[tagName];
+        } else if (tagName === options.cdataPropName) {
+            // CDATA content
+            content += item[tagName][0][options.textNodeName];
+        } else if (tagName === options.commentPropName) {
+            // Comment content
+            content += item[tagName][0][options.textNodeName];
+        } else if (tagName && tagName[0] === "?") {
+            // Processing instruction - skip for stopNodes
+            continue;
+        } else if (tagName) {
+            // Nested tags within stopNode — no sanitizeName, content is raw
+            const attStr = attr_to_str_raw(item[":@"], options);
+            const nestedContent = getRawContent(item[tagName], options);
+
+            if (!nestedContent || nestedContent.length === 0) {
+                content += `<${tagName}${attStr}/>`;
+            } else {
+                content += `<${tagName}${attStr}>${nestedContent}</${tagName}>`;
+            }
+        }
+    }
+    return content;
+}
+
+/**
+ * Build attribute string for stopNodes - NO entity replacement
+ */
+function attr_to_str_raw(attrMap, options) {
+    let attrStr = "";
+    if (attrMap && !options.ignoreAttributes) {
+        for (let attr in attrMap) {
+            if (!Object.prototype.hasOwnProperty.call(attrMap, attr)) continue;
+            // For stopNodes, use raw value without processing
+            let attrVal = attrMap[attr];
+            if (attrVal === true && options.suppressBooleanAttributes) {
+                attrStr += ` ${attr.substr(options.attributeNamePrefix.length)}`;
+            } else {
+                attrStr += ` ${attr.substr(options.attributeNamePrefix.length)}="${escapeAttribute(attrVal)}"`;
+            }
+        }
+    }
+    return attrStr;
 }
 
 function propName(obj) {
@@ -45455,28 +50621,49 @@ function propName(obj) {
     }
 }
 
-function attr_to_str(attrMap, options) {
+/**
+ * Build attribute string, resolving attribute names through sanitizeName when configured.
+ * Accepts matcher so the callback has path context.
+ */
+function attr_to_str(attrMap, options, isStopNode, matcher, xmlVersion) {
     let attrStr = "";
     if (attrMap && !options.ignoreAttributes) {
         for (let attr in attrMap) {
             if (!Object.prototype.hasOwnProperty.call(attrMap, attr)) continue;
-            let attrVal = options.attributeValueProcessor(attr, attrMap[attr]);
-            attrVal = replaceEntitiesValue(attrVal, options);
-            if (attrVal === true && options.suppressBooleanAttributes) {
-                attrStr += ` ${attr.substr(options.attributeNamePrefix.length)}`;
+
+            // Strip prefix to get the clean XML attribute name, then optionally sanitize it
+            const cleanAttrName = attr.substr(options.attributeNamePrefix.length);
+            const resolvedAttrName = isStopNode
+                ? cleanAttrName  // stopNodes are raw — skip sanitizeName for attr names too
+                : resolveTagName$1(cleanAttrName, true, options, matcher, xmlVersion);
+
+            let attrVal;
+            if (isStopNode) {
+                // For stopNodes, use raw value without any processing
+                attrVal = attrMap[attr];
             } else {
-                attrStr += ` ${attr.substr(options.attributeNamePrefix.length)}="${attrVal}"`;
+                // Normal processing: apply attributeValueProcessor and entity replacement
+                attrVal = options.attributeValueProcessor(attr, attrMap[attr]);
+                attrVal = replaceEntitiesValue(attrVal, options);
+            }
+
+            if (attrVal === true && options.suppressBooleanAttributes) {
+                attrStr += ` ${resolvedAttrName}`;
+            } else {
+                attrStr += ` ${resolvedAttrName}="${escapeAttribute(attrVal)}"`;
             }
         }
     }
     return attrStr;
 }
 
-function isStopNode(jPath, options) {
-    jPath = jPath.substr(0, jPath.length - options.textNodeName.length - 1);
-    let tagName = jPath.substr(jPath.lastIndexOf(".") + 1);
-    for (let index in options.stopNodes) {
-        if (options.stopNodes[index] === jPath || options.stopNodes[index] === "*." + tagName) return true;
+function checkStopNode(matcher, stopNodeExpressions) {
+    if (!stopNodeExpressions || stopNodeExpressions.length === 0) return false;
+
+    for (let i = 0; i < stopNodeExpressions.length; i++) {
+        if (matcher.matches(stopNodeExpressions[i])) {
+            return true;
+        }
     }
     return false;
 }
@@ -45541,11 +50728,44 @@ const defaultOptions = {
   stopNodes: [],
   // transformTagName: false,
   // transformAttributeName: false,
-  oneListGroup: false
+  oneListGroup: false,
+  maxNestedTags: 100,
+  jPath: true,  // When true, callbacks receive string jPath; when false, receive Matcher instance
+  sanitizeName: false  // false = allow all names as-is (default, backward-compatible).
+  // Set to a function (name, { isAttribute, matcher }) => string to
+  // validate/sanitize tag and attribute names. Throw inside the function
+  // to reject an invalid name.
 };
 
 function Builder(options) {
   this.options = Object.assign({}, defaultOptions, options);
+
+  // Convert old-style stopNodes for backward compatibility
+  // Old syntax: "*.tag" meant "tag anywhere in tree"
+  // New syntax: "..tag" means "tag anywhere in tree"
+  if (this.options.stopNodes && Array.isArray(this.options.stopNodes)) {
+    this.options.stopNodes = this.options.stopNodes.map(node => {
+      if (typeof node === 'string' && node.startsWith('*.')) {
+        // Convert old wildcard syntax to deep wildcard
+        return '..' + node.substring(2);
+      }
+      return node;
+    });
+  }
+
+  // Pre-compile stopNode expressions for pattern matching
+  this.stopNodeExpressions = [];
+  if (this.options.stopNodes && Array.isArray(this.options.stopNodes)) {
+    for (let i = 0; i < this.options.stopNodes.length; i++) {
+      const node = this.options.stopNodes[i];
+      if (typeof node === 'string') {
+        this.stopNodeExpressions.push(new Expression(node));
+      } else if (node instanceof Expression) {
+        this.stopNodeExpressions.push(node);
+      }
+    }
+  }
+
   if (this.options.ignoreAttributes === true || this.options.attributesGroupName) {
     this.isAttribute = function (/*a*/) {
       return false;
@@ -45571,6 +50791,44 @@ function Builder(options) {
   }
 }
 
+/**
+ * Detect XML version from the ?xml declaration at the root of a plain-object input.
+ * Checks both attributesGroupName and flat attribute forms.
+ * Returns '1.0' if no declaration is found.
+ */
+function detectXmlVersionFromObj(jObj, options) {
+  const decl = jObj['?xml'];
+  if (decl && typeof decl === 'object') {
+    // attributesGroupName path e.g. { '$$': { '@_version': '1.1' } }
+    if (options.attributesGroupName && decl[options.attributesGroupName]) {
+      const v = decl[options.attributesGroupName][options.attributeNamePrefix + 'version'];
+      if (v) return v;
+    }
+    // flat attribute path e.g. { '@_version': '1.1' }
+    const v = decl[options.attributeNamePrefix + 'version'];
+    if (v) return v;
+  }
+  return '1.0';
+}
+
+/**
+ * Resolve a tag or attribute name through sanitizeName if configured.
+ * Validation via xml-naming's qName is performed first; the sanitizeName
+ * callback is invoked only when the name is invalid. If sanitizeName is
+ * false (default), no validation occurs and the name is used as-is.
+ *
+ * @param {string}  name        - raw name from the JS object
+ * @param {boolean} isAttribute - true when resolving an attribute name
+ * @param {object}  options
+ * @param {Matcher} matcher     - current matcher state (readonly from callback perspective)
+ * @param {string}  xmlVersion  - '1.0' or '1.1', forwarded to xml-naming
+ */
+function resolveTagName(name, isAttribute, options, matcher, xmlVersion) {
+  if (!options.sanitizeName) return name;
+  if (qName(name, { xmlVersion })) return name;
+  return options.sanitizeName(name, { isAttribute, matcher: matcher.readOnly() });
+}
+
 Builder.prototype.build = function (jObj) {
   if (this.options.preserveOrder) {
     return toXml(jObj, this.options);
@@ -45580,16 +50838,43 @@ Builder.prototype.build = function (jObj) {
         [this.options.arrayNodeName]: jObj
       };
     }
-    return this.j2x(jObj, 0, []).val;
+    // Initialize matcher for path tracking
+    const matcher = new Matcher();
+    const xmlVersion = detectXmlVersionFromObj(jObj, this.options);
+    return this.j2x(jObj, 0, matcher, xmlVersion).val;
   }
 };
 
-Builder.prototype.j2x = function (jObj, level, ajPath) {
+Builder.prototype.j2x = function (jObj, level, matcher, xmlVersion) {
   let attrStr = '';
   let val = '';
-  const jPath = ajPath.join('.');
+  if (this.options.maxNestedTags && matcher.getDepth() >= this.options.maxNestedTags) {
+    throw new Error("Maximum nested tags exceeded");
+  }
+  // Get jPath based on option: string for backward compatibility, or Matcher for new features
+  const jPath = this.options.jPath ? matcher.toString() : matcher;
+
+  // Check if current node is a stopNode (will be used for attribute encoding)
+  const isCurrentStopNode = this.checkStopNode(matcher);
+
   for (let key in jObj) {
     if (!Object.prototype.hasOwnProperty.call(jObj, key)) continue;
+
+    // Resolve the key through sanitizeName before any use.
+    // Special keys (textNodeName, cdataPropName, commentPropName, attributeNamePrefix,
+    // attributesGroupName, "?" PI tags) are exempt — they are builder-internal conventions,
+    // not user-supplied XML names.
+    const isSpecialKey = key === this.options.textNodeName
+      || key === this.options.cdataPropName
+      || key === this.options.commentPropName
+      || (this.options.attributesGroupName && key === this.options.attributesGroupName)
+      || this.isAttribute(key)
+      || key[0] === '?';
+
+    const resolvedKey = isSpecialKey
+      ? key
+      : resolveTagName(key, false, this.options, matcher, xmlVersion);
+
     if (typeof jObj[key] === 'undefined') {
       // supress undefined node only if it is not an attribute
       if (this.isAttribute(key)) {
@@ -45599,28 +50884,44 @@ Builder.prototype.j2x = function (jObj, level, ajPath) {
       // null attribute should be ignored by the attribute list, but should not cause the tag closing
       if (this.isAttribute(key)) {
         val += '';
-      } else if (key === this.options.cdataPropName) {
+      } else if (resolvedKey === this.options.cdataPropName || resolvedKey === this.options.commentPropName) {
         val += '';
-      } else if (key[0] === '?') {
-        val += this.indentate(level) + '<' + key + '?' + this.tagEndChar;
+      } else if (resolvedKey[0] === '?') {
+        val += this.indentate(level) + '<' + resolvedKey + '?' + this.tagEndChar;
       } else {
-        val += this.indentate(level) + '<' + key + '/' + this.tagEndChar;
+        val += this.indentate(level) + '<' + resolvedKey + '/' + this.tagEndChar;
       }
-      // val += this.indentate(level) + '<' + key + '/' + this.tagEndChar;
     } else if (jObj[key] instanceof Date) {
-      val += this.buildTextValNode(jObj[key], key, '', level);
+      val += this.buildTextValNode(jObj[key], resolvedKey, '', level, matcher);
     } else if (typeof jObj[key] !== 'object') {
       //premitive type
       const attr = this.isAttribute(key);
       if (attr && !this.ignoreAttributesFn(attr, jPath)) {
-        attrStr += this.buildAttrPairStr(attr, '' + jObj[key]);
+        // Resolve the attribute name through sanitizeName
+        const resolvedAttr = resolveTagName(attr, true, this.options, matcher, xmlVersion);
+        attrStr += this.buildAttrPairStr(resolvedAttr, '' + jObj[key], isCurrentStopNode);
       } else if (!attr) {
         //tag value
         if (key === this.options.textNodeName) {
           let newval = this.options.tagValueProcessor(key, '' + jObj[key]);
           val += this.replaceEntitiesValue(newval);
         } else {
-          val += this.buildTextValNode(jObj[key], key, '', level);
+          // Check if this is a stopNode before building
+          matcher.push(resolvedKey);
+          const isStopNode = this.checkStopNode(matcher);
+          matcher.pop();
+
+          if (isStopNode) {
+            // Build as raw content without encoding
+            const textValue = '' + jObj[key];
+            if (textValue === '') {
+              val += this.indentate(level) + '<' + resolvedKey + this.closeTag(resolvedKey) + this.tagEndChar;
+            } else {
+              val += this.indentate(level) + '<' + resolvedKey + '>' + textValue + '</' + resolvedKey + this.tagEndChar;
+            }
+          } else {
+            val += this.buildTextValNode(jObj[key], resolvedKey, '', level, matcher);
+          }
         }
       }
     } else if (Array.isArray(jObj[key])) {
@@ -45631,31 +50932,50 @@ Builder.prototype.j2x = function (jObj, level, ajPath) {
       for (let j = 0; j < arrLen; j++) {
         const item = jObj[key][j];
         if (typeof item === 'undefined') ; else if (item === null) {
-          if (key[0] === "?") val += this.indentate(level) + '<' + key + '?' + this.tagEndChar;
-          else val += this.indentate(level) + '<' + key + '/' + this.tagEndChar;
-          // val += this.indentate(level) + '<' + key + '/' + this.tagEndChar;
+          if (resolvedKey[0] === "?") val += this.indentate(level) + '<' + resolvedKey + '?' + this.tagEndChar;
+          else val += this.indentate(level) + '<' + resolvedKey + '/' + this.tagEndChar;
         } else if (typeof item === 'object') {
           if (this.options.oneListGroup) {
-            const result = this.j2x(item, level + 1, ajPath.concat(key));
+            // Push tag to matcher before recursive call
+            matcher.push(resolvedKey);
+            const result = this.j2x(item, level + 1, matcher, xmlVersion);
+            // Pop tag from matcher after recursive call
+            matcher.pop();
+
             listTagVal += result.val;
             if (this.options.attributesGroupName && item.hasOwnProperty(this.options.attributesGroupName)) {
               listTagAttr += result.attrStr;
             }
           } else {
-            listTagVal += this.processTextOrObjNode(item, key, level, ajPath);
+            listTagVal += this.processTextOrObjNode(item, resolvedKey, level, matcher, xmlVersion);
           }
         } else {
           if (this.options.oneListGroup) {
-            let textValue = this.options.tagValueProcessor(key, item);
+            let textValue = this.options.tagValueProcessor(resolvedKey, item);
             textValue = this.replaceEntitiesValue(textValue);
             listTagVal += textValue;
           } else {
-            listTagVal += this.buildTextValNode(item, key, '', level);
+            // Check if this is a stopNode before building
+            matcher.push(resolvedKey);
+            const isStopNode = this.checkStopNode(matcher);
+            matcher.pop();
+
+            if (isStopNode) {
+              // Build as raw content without encoding
+              const textValue = '' + item;
+              if (textValue === '') {
+                listTagVal += this.indentate(level) + '<' + resolvedKey + this.closeTag(resolvedKey) + this.tagEndChar;
+              } else {
+                listTagVal += this.indentate(level) + '<' + resolvedKey + '>' + textValue + '</' + resolvedKey + this.tagEndChar;
+              }
+            } else {
+              listTagVal += this.buildTextValNode(item, resolvedKey, '', level, matcher);
+            }
           }
         }
       }
       if (this.options.oneListGroup) {
-        listTagVal = this.buildObjectNode(listTagVal, key, listTagAttr, level);
+        listTagVal = this.buildObjectNode(listTagVal, resolvedKey, listTagAttr, level);
       }
       val += listTagVal;
     } else {
@@ -45664,32 +50984,196 @@ Builder.prototype.j2x = function (jObj, level, ajPath) {
         const Ks = Object.keys(jObj[key]);
         const L = Ks.length;
         for (let j = 0; j < L; j++) {
-          attrStr += this.buildAttrPairStr(Ks[j], '' + jObj[key][Ks[j]]);
+          // Resolve attribute names inside attributesGroupName
+          const resolvedAttr = resolveTagName(Ks[j], true, this.options, matcher, xmlVersion);
+          attrStr += this.buildAttrPairStr(resolvedAttr, '' + jObj[key][Ks[j]], isCurrentStopNode);
         }
       } else {
-        val += this.processTextOrObjNode(jObj[key], key, level, ajPath);
+        val += this.processTextOrObjNode(jObj[key], resolvedKey, level, matcher, xmlVersion);
       }
     }
   }
   return { attrStr: attrStr, val: val };
 };
 
-Builder.prototype.buildAttrPairStr = function (attrName, val) {
-  val = this.options.attributeValueProcessor(attrName, '' + val);
-  val = this.replaceEntitiesValue(val);
+Builder.prototype.buildAttrPairStr = function (attrName, val, isStopNode) {
+  if (!isStopNode) {
+    val = this.options.attributeValueProcessor(attrName, '' + val);
+    val = this.replaceEntitiesValue(val);
+  }
   if (this.options.suppressBooleanAttributes && val === "true") {
     return ' ' + attrName;
-  } else return ' ' + attrName + '="' + val + '"';
+  } else return ' ' + attrName + '="' + escapeAttribute(val) + '"';
 };
 
-function processTextOrObjNode(object, key, level, ajPath) {
-  const result = this.j2x(object, level + 1, ajPath.concat(key));
-  if (object[this.options.textNodeName] !== undefined && Object.keys(object).length === 1) {
-    return this.buildTextValNode(object[this.options.textNodeName], key, result.attrStr, level);
+function processTextOrObjNode(object, key, level, matcher, xmlVersion) {
+  // Extract attributes to pass to matcher
+  const attrValues = this.extractAttributes(object);
+
+  // Push tag to matcher before recursion WITH attributes
+  matcher.push(key, attrValues);
+
+  // Check if this entire node is a stopNode
+  const isStopNode = this.checkStopNode(matcher);
+
+  if (isStopNode) {
+    // For stopNodes, build raw content without entity encoding
+    const rawContent = this.buildRawContent(object);
+    const attrStr = this.buildAttributesForStopNode(object);
+    matcher.pop();
+    return this.buildObjectNode(rawContent, key, attrStr, level);
+  }
+
+  const result = this.j2x(object, level + 1, matcher, xmlVersion);
+  // Pop tag from matcher after recursion
+  matcher.pop();
+
+  // PI/XML-declaration tags must never emit text content — route through
+  // buildTextValNode which correctly ignores the text node for "?" tags.
+  if (key[0] === '?') {
+    return this.buildTextValNode('', key, result.attrStr, level, matcher);
+  } else if (object[this.options.textNodeName] !== undefined && Object.keys(object).length === 1) {
+    return this.buildTextValNode(object[this.options.textNodeName], key, result.attrStr, level, matcher);
   } else {
     return this.buildObjectNode(result.val, key, result.attrStr, level);
   }
 }
+
+// Helper method to extract attributes from an object
+Builder.prototype.extractAttributes = function (obj) {
+  if (!obj || typeof obj !== 'object') return null;
+
+  const attrValues = {};
+  let hasAttrs = false;
+
+  // Check for attributesGroupName (when attributes are grouped)
+  if (this.options.attributesGroupName && obj[this.options.attributesGroupName]) {
+    const attrGroup = obj[this.options.attributesGroupName];
+    for (let attrKey in attrGroup) {
+      if (!Object.prototype.hasOwnProperty.call(attrGroup, attrKey)) continue;
+      // Remove attribute prefix if present
+      const cleanKey = attrKey.startsWith(this.options.attributeNamePrefix)
+        ? attrKey.substring(this.options.attributeNamePrefix.length)
+        : attrKey;
+      attrValues[cleanKey] = escapeAttribute(attrGroup[attrKey]);
+      hasAttrs = true;
+    }
+  } else {
+    // Look for individual attributes (prefixed with attributeNamePrefix)
+    for (let key in obj) {
+      if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+      const attr = this.isAttribute(key);
+      if (attr) {
+        attrValues[attr] = escapeAttribute(obj[key]);
+        hasAttrs = true;
+      }
+    }
+  }
+
+  return hasAttrs ? attrValues : null;
+};
+
+// Build raw content for stopNode without entity encoding
+Builder.prototype.buildRawContent = function (obj) {
+  if (typeof obj === 'string') {
+    return obj; // Already a string, return as-is
+  }
+
+  if (typeof obj !== 'object' || obj === null) {
+    return String(obj);
+  }
+
+  // Check if this is a stopNode data from parser: { "#text": "raw xml", "@_attr": "val" }
+  if (obj[this.options.textNodeName] !== undefined) {
+    return obj[this.options.textNodeName]; // Return raw text without encoding
+  }
+
+  // Build raw XML from nested structure
+  let content = '';
+
+  for (let key in obj) {
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+
+    // Skip attributes
+    if (this.isAttribute(key)) continue;
+    if (this.options.attributesGroupName && key === this.options.attributesGroupName) continue;
+
+    const value = obj[key];
+
+    if (key === this.options.textNodeName) {
+      content += value; // Raw text
+    } else if (Array.isArray(value)) {
+      // Array of same tag
+      for (let item of value) {
+        if (typeof item === 'string' || typeof item === 'number') {
+          content += `<${key}>${item}</${key}>`;
+        } else if (typeof item === 'object' && item !== null) {
+          const nestedContent = this.buildRawContent(item);
+          const nestedAttrs = this.buildAttributesForStopNode(item);
+          if (nestedContent === '') {
+            content += `<${key}${nestedAttrs}/>`;
+          } else {
+            content += `<${key}${nestedAttrs}>${nestedContent}</${key}>`;
+          }
+        }
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      // Nested object
+      const nestedContent = this.buildRawContent(value);
+      const nestedAttrs = this.buildAttributesForStopNode(value);
+      if (nestedContent === '') {
+        content += `<${key}${nestedAttrs}/>`;
+      } else {
+        content += `<${key}${nestedAttrs}>${nestedContent}</${key}>`;
+      }
+    } else {
+      // Primitive value
+      content += `<${key}>${value}</${key}>`;
+    }
+  }
+
+  return content;
+};
+
+// Build attribute string for stopNode (no entity encoding)
+Builder.prototype.buildAttributesForStopNode = function (obj) {
+  if (!obj || typeof obj !== 'object') return '';
+
+  let attrStr = '';
+
+  // Check for attributesGroupName (when attributes are grouped)
+  if (this.options.attributesGroupName && obj[this.options.attributesGroupName]) {
+    const attrGroup = obj[this.options.attributesGroupName];
+    for (let attrKey in attrGroup) {
+      if (!Object.prototype.hasOwnProperty.call(attrGroup, attrKey)) continue;
+      const cleanKey = attrKey.startsWith(this.options.attributeNamePrefix)
+        ? attrKey.substring(this.options.attributeNamePrefix.length)
+        : attrKey;
+      const val = attrGroup[attrKey];
+      if (val === true && this.options.suppressBooleanAttributes) {
+        attrStr += ' ' + cleanKey;
+      } else {
+        attrStr += ' ' + cleanKey + '="' + val + '"'; // No encoding for stopNode
+      }
+    }
+  } else {
+    // Look for individual attributes
+    for (let key in obj) {
+      if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
+      const attr = this.isAttribute(key);
+      if (attr) {
+        const val = obj[key];
+        if (val === true && this.options.suppressBooleanAttributes) {
+          attrStr += ' ' + attr;
+        } else {
+          attrStr += ' ' + attr + '="' + val + '"'; // No encoding for stopNode
+        }
+      }
+    }
+  }
+
+  return attrStr;
+};
 
 Builder.prototype.buildObjectNode = function (val, key, attrStr, level) {
   if (val === "") {
@@ -45697,8 +51181,10 @@ Builder.prototype.buildObjectNode = function (val, key, attrStr, level) {
     else {
       return this.indentate(level) + '<' + key + attrStr + this.closeTag(key) + this.tagEndChar;
     }
+  } else if (key[0] === "?") {
+    // PI/XML-declaration tags never have body content — treat them like empty.
+    return this.indentate(level) + '<' + key + attrStr + '?' + this.tagEndChar;
   } else {
-
     let tagEndExp = '</' + key + this.tagEndChar;
     let piClosingChar = "";
 
@@ -45733,14 +51219,28 @@ Builder.prototype.closeTag = function (key) {
   return closeTag;
 };
 
-Builder.prototype.buildTextValNode = function (val, key, attrStr, level) {
+Builder.prototype.checkStopNode = function (matcher) {
+  if (!this.stopNodeExpressions || this.stopNodeExpressions.length === 0) return false;
+
+  for (let i = 0; i < this.stopNodeExpressions.length; i++) {
+    if (matcher.matches(this.stopNodeExpressions[i])) {
+      return true;
+    }
+  }
+  return false;
+};
+
+Builder.prototype.buildTextValNode = function (val, key, attrStr, level, matcher) {
   if (this.options.cdataPropName !== false && key === this.options.cdataPropName) {
-    return this.indentate(level) + `<![CDATA[${val}]]>` + this.newLine;
+    const safeVal = safeCdata(val);
+    return this.indentate(level) + `<![CDATA[${safeVal}]]>` + this.newLine;
   } else if (this.options.commentPropName !== false && key === this.options.commentPropName) {
-    return this.indentate(level) + `<!--${val}-->` + this.newLine;
+    const safeVal = safeComment(val);
+    return this.indentate(level) + `<!--${safeVal}-->` + this.newLine;
   } else if (key[0] === "?") {//PI tag
     return this.indentate(level) + '<' + key + attrStr + '?' + this.tagEndChar;
   } else {
+    // Normal processing: apply tagValueProcessor and entity replacement
     let textValue = this.options.tagValueProcessor(key, val);
     textValue = this.replaceEntitiesValue(textValue);
 
@@ -45794,20 +51294,34 @@ const XML_CHARKEY = "_";
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 function getCommonOptions(options) {
-    var _a;
     return {
         attributesGroupName: XML_ATTRKEY,
-        textNodeName: (_a = options.xmlCharKey) !== null && _a !== void 0 ? _a : XML_CHARKEY,
+        textNodeName: options.xmlCharKey ?? XML_CHARKEY,
         ignoreAttributes: false,
         suppressBooleanAttributes: false,
     };
 }
 function getSerializerOptions(options = {}) {
-    var _a, _b;
-    return Object.assign(Object.assign({}, getCommonOptions(options)), { attributeNamePrefix: "@_", format: true, suppressEmptyNode: true, indentBy: "", rootNodeName: (_a = options.rootName) !== null && _a !== void 0 ? _a : "root", cdataPropName: (_b = options.cdataPropName) !== null && _b !== void 0 ? _b : "__cdata" });
+    return {
+        ...getCommonOptions(options),
+        attributeNamePrefix: "@_",
+        format: true,
+        suppressEmptyNode: true,
+        indentBy: "",
+        rootNodeName: options.rootName ?? "root",
+        cdataPropName: options.cdataPropName ?? "__cdata",
+    };
 }
 function getParserOptions(options = {}) {
-    return Object.assign(Object.assign({}, getCommonOptions(options)), { parseAttributeValue: false, parseTagValue: false, attributeNamePrefix: "", stopNodes: options.stopNodes, processEntities: true, trimValues: false });
+    return {
+        ...getCommonOptions(options),
+        parseAttributeValue: false,
+        parseTagValue: false,
+        attributeNamePrefix: "",
+        stopNodes: options.stopNodes,
+        processEntities: true,
+        trimValues: false,
+    };
 }
 /**
  * Converts given JSON object to XML string
@@ -45846,7 +51360,7 @@ async function parseXML(str, opts = {}) {
     if (!opts.includeRoot) {
         for (const key of Object.keys(parsedXml)) {
             const value = parsedXml[key];
-            return typeof value === "object" ? Object.assign({}, value) : value;
+            return typeof value === "object" ? { ...value } : value;
         }
     }
     return parsedXml;
@@ -46326,6 +51840,2981 @@ class BufferScheduler {
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
+const __isNode__ =
+  typeof process === "object" &&
+  typeof process.versions === "object" &&
+  typeof process.versions.node === "string";
+let require$1;
+let __filename$1;
+let __dirname$1;
+if (__isNode__) {
+  require$1 = createRequire(import.meta.url);
+  __filename$1 = fileURLToPath(import.meta.url);
+  __dirname$1 = dirname$1(__filename$1);
+}
+// ESM-COMPAT-END
+
+var NativeCRC64 = (() => {
+  var _scriptDir = typeof document !== 'undefined' && document.currentScript ? document.currentScript.src : undefined;
+  if (typeof __filename$1 !== 'undefined') _scriptDir = _scriptDir || __filename$1;
+  return (
+function(NativeCRC64) {
+  NativeCRC64 = NativeCRC64 || {};
+
+
+
+// The Module object: Our interface to the outside world. We import
+// and export values on it. There are various ways Module can be used:
+// 1. Not defined. We create it here
+// 2. A function parameter, function(Module) { ..generated code.. }
+// 3. pre-run appended it, var Module = {}; ..generated code..
+// 4. External script tag defines var Module.
+// We need to check if Module already exists (e.g. case 3 above).
+// Substitution will be replaced with actual code on later stage of the build,
+// this way Closure Compiler will not mangle it (e.g. case 4. above).
+// Note that if you want to run closure, and also to use Module
+// after the generated code, you will need to define   var Module = {};
+// before the code. Then that object will be used in the code, and you
+// can continue to use Module afterwards as well.
+var Module = typeof NativeCRC64 != 'undefined' ? NativeCRC64 : {};
+
+// See https://caniuse.com/mdn-javascript_builtins_object_assign
+
+// See https://caniuse.com/mdn-javascript_builtins_bigint64array
+
+// Set up the promise that indicates the Module is initialized
+var readyPromiseResolve, readyPromiseReject;
+Module['ready'] = new Promise(function(resolve, reject) {
+  readyPromiseResolve = resolve;
+  readyPromiseReject = reject;
+});
+["_malloc","_free","_emscripten_bind_VoidPtr___destroy___0","_emscripten_bind_Crc64Hash_Crc64Hash_0","_emscripten_bind_Crc64Hash_OnAppend_2","_emscripten_bind_Crc64Hash_OnFinal_3","_emscripten_bind_Crc64Hash___destroy___0","_fflush","onRuntimeInitialized"].forEach((prop) => {
+  if (!Object.getOwnPropertyDescriptor(Module['ready'], prop)) {
+    Object.defineProperty(Module['ready'], prop, {
+      get: () => abort('You are getting ' + prop + ' on the Promise object, instead of the instance. Use .then() to get called back with the instance, see the MODULARIZE docs in src/settings.js'),
+      set: () => abort('You are setting ' + prop + ' on the Promise object, instead of the instance. Use .then() to get called back with the instance, see the MODULARIZE docs in src/settings.js'),
+    });
+  }
+});
+
+// --pre-jses are emitted after the Module integration code, so that they can
+// refer to Module (if they choose; they can also define Module)
+
+
+// Sometimes an existing Module object exists with properties
+// meant to overwrite the default module functionality. Here
+// we collect those properties and reapply _after_ we configure
+// the current environment's defaults to avoid having to be so
+// defensive during initialization.
+var moduleOverrides = Object.assign({}, Module);
+
+// Determine the runtime environment we are in. You can customize this by
+// setting the ENVIRONMENT setting at compile time (see settings.js).
+
+// Attempt to auto-detect the environment
+var ENVIRONMENT_IS_WEB = typeof window == 'object';
+var ENVIRONMENT_IS_WORKER = typeof importScripts == 'function';
+// N.b. Electron.js environment is simultaneously a NODE-environment, but
+// also a web environment.
+var ENVIRONMENT_IS_NODE = typeof process == 'object' && typeof process.versions == 'object' && typeof process.versions.node == 'string';
+var ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIRONMENT_IS_WORKER;
+
+if (Module['ENVIRONMENT']) {
+  throw new Error('Module.ENVIRONMENT has been deprecated. To force the environment, use the ENVIRONMENT compile-time option (for example, -sENVIRONMENT=web or -sENVIRONMENT=node)');
+}
+
+// `/` should be present at the end if `scriptDirectory` is not empty
+var scriptDirectory = '';
+function locateFile(path) {
+  if (Module['locateFile']) {
+    return Module['locateFile'](path, scriptDirectory);
+  }
+  return scriptDirectory + path;
+}
+
+if (ENVIRONMENT_IS_NODE) {
+  if (typeof process == 'undefined' || !process.release || process.release.name !== 'node') throw new Error('not compiled for this environment (did you build to HTML and try to run it not on the web, or set ENVIRONMENT to something - like node - and run it someplace else - like on the web?)');
+  // `require()` is no-op in an ESM module, use `createRequire()` to construct
+  // the require()` function.  This is only necessary for multi-environment
+  // builds, `-sENVIRONMENT=node` emits a static import declaration instead.
+  // TODO: Swap all `require()`'s with `import()`'s?
+  // These modules will usually be used on Node.js. Load them eagerly to avoid
+  // the complexity of lazy-loading.
+  require$1('fs');
+  var nodePath = require$1('path');
+
+  if (ENVIRONMENT_IS_WORKER) {
+    scriptDirectory = nodePath.dirname(scriptDirectory) + '/';
+  } else {
+    scriptDirectory = __dirname$1 + '/';
+  }
+
+// end include: node_shell_read.js
+  if (process['argv'].length > 1) {
+    process['argv'][1].replace(/\\/g, '/');
+  }
+
+  process['argv'].slice(2);
+
+  // MODULARIZE will export the module in the proper place outside, we don't need to export here
+
+  process['on']('uncaughtException', function(ex) {
+    // suppress ExitStatus exceptions from showing an error
+    if (!(ex instanceof ExitStatus)) {
+      throw ex;
+    }
+  });
+
+  // Without this older versions of node (< v15) will log unhandled rejections
+  // but return 0, which is not normally the desired behaviour.  This is
+  // not be needed with node v15 and about because it is now the default
+  // behaviour:
+  // See https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode
+  process['on']('unhandledRejection', function(reason) { throw reason; });
+
+  Module['inspect'] = function () { return '[Emscripten Module object]'; };
+
+} else
+if (ENVIRONMENT_IS_SHELL) {
+
+  if ((typeof process == 'object' && typeof require$1 === 'function') || typeof window == 'object' || typeof importScripts == 'function') throw new Error('not compiled for this environment (did you build to HTML and try to run it not on the web, or set ENVIRONMENT to something - like node - and run it someplace else - like on the web?)');
+
+  if (typeof scriptArgs != 'undefined') {
+    scriptArgs;
+  }
+
+  if (typeof print != 'undefined') {
+    // Prefer to use print/printErr where they exist, as they usually work better.
+    if (typeof console == 'undefined') console = /** @type{!Console} */({});
+    console.log = /** @type{!function(this:Console, ...*): undefined} */ (print);
+    console.warn = console.error = /** @type{!function(this:Console, ...*): undefined} */ (typeof printErr != 'undefined' ? printErr : print);
+  }
+
+} else
+
+// Note that this includes Node.js workers when relevant (pthreads is enabled).
+// Node.js workers are detected as a combination of ENVIRONMENT_IS_WORKER and
+// ENVIRONMENT_IS_NODE.
+if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
+  if (ENVIRONMENT_IS_WORKER) { // Check worker, not web, since window could be polyfilled
+    scriptDirectory = self.location.href;
+  } else if (typeof document != 'undefined' && document.currentScript) { // web
+    scriptDirectory = document.currentScript.src;
+  }
+  // When MODULARIZE, this JS may be executed later, after document.currentScript
+  // is gone, so we saved it, and we use it here instead of any other info.
+  if (_scriptDir) {
+    scriptDirectory = _scriptDir;
+  }
+  // blob urls look like blob:http://site.com/etc/etc and we cannot infer anything from them.
+  // otherwise, slice off the final part of the url to find the script directory.
+  // if scriptDirectory does not contain a slash, lastIndexOf will return -1,
+  // and scriptDirectory will correctly be replaced with an empty string.
+  // If scriptDirectory contains a query (starting with ?) or a fragment (starting with #),
+  // they are removed because they could contain a slash.
+  if (scriptDirectory.indexOf('blob:') !== 0) {
+    scriptDirectory = scriptDirectory.substr(0, scriptDirectory.replace(/[?#].*/, "").lastIndexOf('/')+1);
+  } else {
+    scriptDirectory = '';
+  }
+
+  if (!(typeof window == 'object' || typeof importScripts == 'function')) throw new Error('not compiled for this environment (did you build to HTML and try to run it not on the web, or set ENVIRONMENT to something - like node - and run it someplace else - like on the web?)');
+} else
+{
+  throw new Error('environment detection error');
+}
+
+var out = Module['print'] || console.log.bind(console);
+var err = Module['printErr'] || console.warn.bind(console);
+
+// Merge back in the overrides
+Object.assign(Module, moduleOverrides);
+// Free the object hierarchy contained in the overrides, this lets the GC
+// reclaim data used e.g. in memoryInitializerRequest, which is a large typed array.
+moduleOverrides = null;
+checkIncomingModuleAPI();
+
+// Emit code to handle expected values on the Module object. This applies Module.x
+// to the proper local x. This has two benefits: first, we only emit it if it is
+// expected to arrive, and second, by using a local everywhere else that can be
+// minified.
+
+if (Module['arguments']) Module['arguments'];legacyModuleProp('arguments', 'arguments_');
+
+if (Module['thisProgram']) Module['thisProgram'];legacyModuleProp('thisProgram', 'thisProgram');
+
+if (Module['quit']) Module['quit'];legacyModuleProp('quit', 'quit_');
+
+// perform assertions in shell.js after we set up out() and err(), as otherwise if an assertion fails it cannot print the message
+// Assertions on removed incoming Module JS APIs.
+assert(typeof Module['memoryInitializerPrefixURL'] == 'undefined', 'Module.memoryInitializerPrefixURL option was removed, use Module.locateFile instead');
+assert(typeof Module['pthreadMainPrefixURL'] == 'undefined', 'Module.pthreadMainPrefixURL option was removed, use Module.locateFile instead');
+assert(typeof Module['cdInitializerPrefixURL'] == 'undefined', 'Module.cdInitializerPrefixURL option was removed, use Module.locateFile instead');
+assert(typeof Module['filePackagePrefixURL'] == 'undefined', 'Module.filePackagePrefixURL option was removed, use Module.locateFile instead');
+assert(typeof Module['read'] == 'undefined', 'Module.read option was removed (modify read_ in JS)');
+assert(typeof Module['readAsync'] == 'undefined', 'Module.readAsync option was removed (modify readAsync in JS)');
+assert(typeof Module['readBinary'] == 'undefined', 'Module.readBinary option was removed (modify readBinary in JS)');
+assert(typeof Module['setWindowTitle'] == 'undefined', 'Module.setWindowTitle option was removed (modify setWindowTitle in JS)');
+assert(typeof Module['TOTAL_MEMORY'] == 'undefined', 'Module.TOTAL_MEMORY has been renamed Module.INITIAL_MEMORY');
+legacyModuleProp('read', 'read_');
+legacyModuleProp('readAsync', 'readAsync');
+legacyModuleProp('readBinary', 'readBinary');
+legacyModuleProp('setWindowTitle', 'setWindowTitle');
+
+assert(!ENVIRONMENT_IS_SHELL, "shell environment detected but not enabled at build time.  Add 'shell' to `-sENVIRONMENT` to enable.");
+
+// include: runtime_debug.js
+
+
+function legacyModuleProp(prop, newName) {
+  if (!Object.getOwnPropertyDescriptor(Module, prop)) {
+    Object.defineProperty(Module, prop, {
+      configurable: true,
+      get: function() {
+        abort('Module.' + prop + ' has been replaced with plain ' + newName + ' (the initial value can be provided on Module, but after startup the value is only looked for on a local variable of that name)');
+      }
+    });
+  }
+}
+
+function ignoredModuleProp(prop) {
+  if (Object.getOwnPropertyDescriptor(Module, prop)) {
+    abort('`Module.' + prop + '` was supplied but `' + prop + '` not included in INCOMING_MODULE_JS_API');
+  }
+}
+
+// forcing the filesystem exports a few things by default
+function isExportedByForceFilesystem(name) {
+  return name === 'FS_createPath' ||
+         name === 'FS_createDataFile' ||
+         name === 'FS_createPreloadedFile' ||
+         name === 'FS_unlink' ||
+         name === 'addRunDependency' ||
+         // The old FS has some functionality that WasmFS lacks.
+         name === 'FS_createLazyFile' ||
+         name === 'FS_createDevice' ||
+         name === 'removeRunDependency';
+}
+
+function missingLibrarySymbol(sym) {
+  if (typeof globalThis !== 'undefined' && !Object.getOwnPropertyDescriptor(globalThis, sym)) {
+    Object.defineProperty(globalThis, sym, {
+      configurable: true,
+      get: function() {
+        // Can't `abort()` here because it would break code that does runtime
+        // checks.  e.g. `if (typeof SDL === 'undefined')`.
+        var msg = '`' + sym + '` is a library symbol and not included by default; add it to your library.js __deps or to DEFAULT_LIBRARY_FUNCS_TO_INCLUDE on the command line';
+        // DEFAULT_LIBRARY_FUNCS_TO_INCLUDE requires the name as it appears in
+        // library.js, which means $name for a JS name with no prefix, or name
+        // for a JS name like _name.
+        var librarySymbol = sym;
+        if (!librarySymbol.startsWith('_')) {
+          librarySymbol = '$' + sym;
+        }
+        msg += " (e.g. -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=" + librarySymbol + ")";
+        if (isExportedByForceFilesystem(sym)) {
+          msg += '. Alternatively, forcing filesystem support (-sFORCE_FILESYSTEM) can export this for you';
+        }
+        warnOnce(msg);
+        return undefined;
+      }
+    });
+  }
+}
+
+function unexportedRuntimeSymbol(sym) {
+  if (!Object.getOwnPropertyDescriptor(Module, sym)) {
+    Object.defineProperty(Module, sym, {
+      configurable: true,
+      get: function() {
+        var msg = "'" + sym + "' was not exported. add it to EXPORTED_RUNTIME_METHODS (see the FAQ)";
+        if (isExportedByForceFilesystem(sym)) {
+          msg += '. Alternatively, forcing filesystem support (-sFORCE_FILESYSTEM) can export this for you';
+        }
+        abort(msg);
+      }
+    });
+  }
+}
+if (Module['wasmBinary']) Module['wasmBinary'];legacyModuleProp('wasmBinary', 'wasmBinary');
+Module['noExitRuntime'] || true;legacyModuleProp('noExitRuntime', 'noExitRuntime');
+
+if (typeof WebAssembly != 'object') {
+  abort('no native wasm support detected');
+}
+
+// Wasm globals
+
+var wasmMemory;
+
+//========================================
+// Runtime essentials
+//========================================
+
+// whether we are quitting the application. no code should run after this.
+// set in exit() and abort()
+var ABORT = false;
+
+/** @type {function(*, string=)} */
+function assert(condition, text) {
+  if (!condition) {
+    abort('Assertion failed' + (text ? ': ' + text : ''));
+  }
+}
+
+// We used to include malloc/free by default in the past. Show a helpful error in
+// builds with assertions.
+
+// include: runtime_strings.js
+
+
+// runtime_strings.js: String related runtime functions that are part of both
+// MINIMAL_RUNTIME and regular runtime.
+
+var UTF8Decoder = typeof TextDecoder != 'undefined' ? new TextDecoder('utf8') : undefined;
+
+/**
+ * Given a pointer 'idx' to a null-terminated UTF8-encoded string in the given
+ * array that contains uint8 values, returns a copy of that string as a
+ * Javascript String object.
+ * heapOrArray is either a regular array, or a JavaScript typed array view.
+ * @param {number} idx
+ * @param {number=} maxBytesToRead
+ * @return {string}
+ */
+function UTF8ArrayToString(heapOrArray, idx, maxBytesToRead) {
+  var endIdx = idx + maxBytesToRead;
+  var endPtr = idx;
+  // TextDecoder needs to know the byte length in advance, it doesn't stop on
+  // null terminator by itself.  Also, use the length info to avoid running tiny
+  // strings through TextDecoder, since .subarray() allocates garbage.
+  // (As a tiny code save trick, compare endPtr against endIdx using a negation,
+  // so that undefined means Infinity)
+  while (heapOrArray[endPtr] && !(endPtr >= endIdx)) ++endPtr;
+
+  if (endPtr - idx > 16 && heapOrArray.buffer && UTF8Decoder) {
+    return UTF8Decoder.decode(heapOrArray.subarray(idx, endPtr));
+  }
+  var str = '';
+  // If building with TextDecoder, we have already computed the string length
+  // above, so test loop end condition against that
+  while (idx < endPtr) {
+    // For UTF8 byte structure, see:
+    // http://en.wikipedia.org/wiki/UTF-8#Description
+    // https://www.ietf.org/rfc/rfc2279.txt
+    // https://tools.ietf.org/html/rfc3629
+    var u0 = heapOrArray[idx++];
+    if (!(u0 & 0x80)) { str += String.fromCharCode(u0); continue; }
+    var u1 = heapOrArray[idx++] & 63;
+    if ((u0 & 0xE0) == 0xC0) { str += String.fromCharCode(((u0 & 31) << 6) | u1); continue; }
+    var u2 = heapOrArray[idx++] & 63;
+    if ((u0 & 0xF0) == 0xE0) {
+      u0 = ((u0 & 15) << 12) | (u1 << 6) | u2;
+    } else {
+      if ((u0 & 0xF8) != 0xF0) warnOnce('Invalid UTF-8 leading byte ' + ptrToString(u0) + ' encountered when deserializing a UTF-8 string in wasm memory to a JS string!');
+      u0 = ((u0 & 7) << 18) | (u1 << 12) | (u2 << 6) | (heapOrArray[idx++] & 63);
+    }
+
+    if (u0 < 0x10000) {
+      str += String.fromCharCode(u0);
+    } else {
+      var ch = u0 - 0x10000;
+      str += String.fromCharCode(0xD800 | (ch >> 10), 0xDC00 | (ch & 0x3FF));
+    }
+  }
+  return str;
+}
+
+// end include: runtime_strings.js
+// Memory management
+
+var /** @type {!ArrayBuffer} */
+  buffer,
+/** @type {!Uint8Array} */
+  HEAPU8,
+/** @type {!Uint32Array} */
+  HEAPU32;
+
+function updateGlobalBufferAndViews(buf) {
+  buffer = buf;
+  Module['HEAP8'] = new Int8Array(buf);
+  Module['HEAP16'] = new Int16Array(buf);
+  Module['HEAP32'] = new Int32Array(buf);
+  Module['HEAPU8'] = HEAPU8 = new Uint8Array(buf);
+  Module['HEAPU16'] = new Uint16Array(buf);
+  Module['HEAPU32'] = HEAPU32 = new Uint32Array(buf);
+  Module['HEAPF32'] = new Float32Array(buf);
+  Module['HEAPF64'] = new Float64Array(buf);
+}
+
+var STACK_SIZE = 5242880;
+if (Module['STACK_SIZE']) assert(STACK_SIZE === Module['STACK_SIZE'], 'the stack size can no longer be determined at runtime');
+
+var INITIAL_MEMORY = Module['INITIAL_MEMORY'] || 16777216;legacyModuleProp('INITIAL_MEMORY', 'INITIAL_MEMORY');
+
+assert(INITIAL_MEMORY >= STACK_SIZE, 'INITIAL_MEMORY should be larger than STACK_SIZE, was ' + INITIAL_MEMORY + '! (STACK_SIZE=' + STACK_SIZE + ')');
+
+// check for full engine support (use string 'subarray' to avoid closure compiler confusion)
+assert(typeof Int32Array != 'undefined' && typeof Float64Array !== 'undefined' && Int32Array.prototype.subarray != undefined && Int32Array.prototype.set != undefined,
+       'JS engine does not provide full typed array support');
+
+// If memory is defined in wasm, the user can't provide it.
+assert(!Module['wasmMemory'], 'Use of `wasmMemory` detected.  Use -sIMPORTED_MEMORY to define wasmMemory externally');
+assert(INITIAL_MEMORY == 16777216, 'Detected runtime INITIAL_MEMORY setting.  Use -sIMPORTED_MEMORY to define wasmMemory dynamically');
+
+// include: runtime_init_table.js
+// In regular non-RELOCATABLE mode the table is exported
+// from the wasm module and this will be assigned once
+// the exports are available.
+var wasmTable;
+
+// end include: runtime_init_table.js
+// include: runtime_stack_check.js
+
+
+// Initializes the stack cookie. Called at the startup of main and at the startup of each thread in pthreads mode.
+function writeStackCookie() {
+  var max = _emscripten_stack_get_end();
+  assert((max & 3) == 0);
+  // If the stack ends at address zero we write our cookies 4 bytes into the
+  // stack.  This prevents interference with the (separate) address-zero check
+  // below.
+  if (max == 0) {
+    max += 4;
+  }
+  // The stack grow downwards towards _emscripten_stack_get_end.
+  // We write cookies to the final two words in the stack and detect if they are
+  // ever overwritten.
+  HEAPU32[((max)>>2)] = 0x2135467;
+  HEAPU32[(((max)+(4))>>2)] = 0x89BACDFE;
+  // Also test the global address 0 for integrity.
+  HEAPU32[0] = 0x63736d65; /* 'emsc' */
+}
+
+function checkStackCookie() {
+  if (ABORT) return;
+  var max = _emscripten_stack_get_end();
+  // See writeStackCookie().
+  if (max == 0) {
+    max += 4;
+  }
+  var cookie1 = HEAPU32[((max)>>2)];
+  var cookie2 = HEAPU32[(((max)+(4))>>2)];
+  if (cookie1 != 0x2135467 || cookie2 != 0x89BACDFE) {
+    abort('Stack overflow! Stack cookie has been overwritten at ' + ptrToString(max) + ', expected hex dwords 0x89BACDFE and 0x2135467, but received ' + ptrToString(cookie2) + ' ' + ptrToString(cookie1));
+  }
+  // Also test the global address 0 for integrity.
+  if (HEAPU32[0] !== 0x63736d65 /* 'emsc' */) {
+    abort('Runtime error: The application has corrupted its heap memory area (address zero)!');
+  }
+}
+
+// end include: runtime_stack_check.js
+// include: runtime_assertions.js
+
+
+// Endianness check
+(function() {
+  var h16 = new Int16Array(1);
+  var h8 = new Int8Array(h16.buffer);
+  h16[0] = 0x6373;
+  if (h8[0] !== 0x73 || h8[1] !== 0x63) throw 'Runtime error: expected the system to be little-endian! (Run with -sSUPPORT_BIG_ENDIAN to bypass)';
+})();
+
+// end include: runtime_assertions.js
+var __ATPRERUN__  = []; // functions called before the runtime is initialized
+var __ATINIT__    = []; // functions called during startup
+var __ATPOSTRUN__ = []; // functions called after the main() is called
+
+var runtimeInitialized = false;
+
+function preRun() {
+
+  if (Module['preRun']) {
+    if (typeof Module['preRun'] == 'function') Module['preRun'] = [Module['preRun']];
+    while (Module['preRun'].length) {
+      addOnPreRun(Module['preRun'].shift());
+    }
+  }
+
+  callRuntimeCallbacks(__ATPRERUN__);
+}
+
+function initRuntime() {
+  assert(!runtimeInitialized);
+  runtimeInitialized = true;
+
+  checkStackCookie();
+
+  
+  callRuntimeCallbacks(__ATINIT__);
+}
+
+function postRun() {
+  checkStackCookie();
+
+  if (Module['postRun']) {
+    if (typeof Module['postRun'] == 'function') Module['postRun'] = [Module['postRun']];
+    while (Module['postRun'].length) {
+      addOnPostRun(Module['postRun'].shift());
+    }
+  }
+
+  callRuntimeCallbacks(__ATPOSTRUN__);
+}
+
+function addOnPreRun(cb) {
+  __ATPRERUN__.unshift(cb);
+}
+
+function addOnInit(cb) {
+  __ATINIT__.unshift(cb);
+}
+
+function addOnPostRun(cb) {
+  __ATPOSTRUN__.unshift(cb);
+}
+
+// include: runtime_math.js
+
+
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/imul
+
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/fround
+
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/clz32
+
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/trunc
+
+assert(Math.imul, 'This browser does not support Math.imul(), build with LEGACY_VM_SUPPORT or POLYFILL_OLD_MATH_FUNCTIONS to add in a polyfill');
+assert(Math.fround, 'This browser does not support Math.fround(), build with LEGACY_VM_SUPPORT or POLYFILL_OLD_MATH_FUNCTIONS to add in a polyfill');
+assert(Math.clz32, 'This browser does not support Math.clz32(), build with LEGACY_VM_SUPPORT or POLYFILL_OLD_MATH_FUNCTIONS to add in a polyfill');
+assert(Math.trunc, 'This browser does not support Math.trunc(), build with LEGACY_VM_SUPPORT or POLYFILL_OLD_MATH_FUNCTIONS to add in a polyfill');
+
+// end include: runtime_math.js
+// A counter of dependencies for calling run(). If we need to
+// do asynchronous work before running, increment this and
+// decrement it. Incrementing must happen in a place like
+// Module.preRun (used by emcc to add file preloading).
+// Note that you can add dependencies in preRun, even though
+// it happens right before run - run will be postponed until
+// the dependencies are met.
+var runDependencies = 0;
+var runDependencyWatcher = null;
+var dependenciesFulfilled = null; // overridden to take different actions when all run dependencies are fulfilled
+var runDependencyTracking = {};
+
+function addRunDependency(id) {
+  runDependencies++;
+
+  if (Module['monitorRunDependencies']) {
+    Module['monitorRunDependencies'](runDependencies);
+  }
+
+  {
+    assert(!runDependencyTracking[id]);
+    runDependencyTracking[id] = 1;
+    if (runDependencyWatcher === null && typeof setInterval != 'undefined') {
+      // Check for missing dependencies every few seconds
+      runDependencyWatcher = setInterval(function() {
+        if (ABORT) {
+          clearInterval(runDependencyWatcher);
+          runDependencyWatcher = null;
+          return;
+        }
+        var shown = false;
+        for (var dep in runDependencyTracking) {
+          if (!shown) {
+            shown = true;
+            err('still waiting on run dependencies:');
+          }
+          err('dependency: ' + dep);
+        }
+        if (shown) {
+          err('(end of list)');
+        }
+      }, 10000);
+    }
+  }
+}
+
+function removeRunDependency(id) {
+  runDependencies--;
+
+  if (Module['monitorRunDependencies']) {
+    Module['monitorRunDependencies'](runDependencies);
+  }
+
+  {
+    assert(runDependencyTracking[id]);
+    delete runDependencyTracking[id];
+  }
+  if (runDependencies == 0) {
+    if (runDependencyWatcher !== null) {
+      clearInterval(runDependencyWatcher);
+      runDependencyWatcher = null;
+    }
+    if (dependenciesFulfilled) {
+      var callback = dependenciesFulfilled;
+      dependenciesFulfilled = null;
+      callback(); // can add another dependenciesFulfilled
+    }
+  }
+}
+
+/** @param {string|number=} what */
+function abort(what) {
+  if (Module['onAbort']) {
+    Module['onAbort'](what);
+  }
+
+  what = 'Aborted(' + what + ')';
+  // TODO(sbc): Should we remove printing and leave it up to whoever
+  // catches the exception?
+  err(what);
+
+  ABORT = true;
+
+  // Use a wasm runtime error, because a JS error might be seen as a foreign
+  // exception, which means we'd run destructors on it. We need the error to
+  // simply make the program stop.
+  // FIXME This approach does not work in Wasm EH because it currently does not assume
+  // all RuntimeErrors are from traps; it decides whether a RuntimeError is from
+  // a trap or not based on a hidden field within the object. So at the moment
+  // we don't have a way of throwing a wasm trap from JS. TODO Make a JS API that
+  // allows this in the wasm spec.
+
+  // Suppress closure compiler warning here. Closure compiler's builtin extern
+  // defintion for WebAssembly.RuntimeError claims it takes no arguments even
+  // though it can.
+  // TODO(https://github.com/google/closure-compiler/pull/3913): Remove if/when upstream closure gets fixed.
+  /** @suppress {checkTypes} */
+  var e = new WebAssembly.RuntimeError(what);
+
+  readyPromiseReject(e);
+  // Throw the error whether or not MODULARIZE is set because abort is used
+  // in code paths apart from instantiation where an exception is expected
+  // to be thrown when abort is called.
+  throw e;
+}
+
+// {{MEM_INITIALIZER}}
+
+// include: memoryprofiler.js
+
+
+// end include: memoryprofiler.js
+// show errors on likely calls to FS when it was not included
+var FS = {
+  error: function() {
+    abort('Filesystem support (FS) was not included. The problem is that you are using files from JS, but files were not used from C/C++, so filesystem support was not auto-included. You can force-include filesystem support with -sFORCE_FILESYSTEM');
+  },
+  init: function() { FS.error(); },
+  createDataFile: function() { FS.error(); },
+  createPreloadedFile: function() { FS.error(); },
+  createLazyFile: function() { FS.error(); },
+  open: function() { FS.error(); },
+  mkdev: function() { FS.error(); },
+  registerDevice: function() { FS.error(); },
+  analyzePath: function() { FS.error(); },
+  loadFilesFromDB: function() { FS.error(); },
+
+  ErrnoError: function ErrnoError() { FS.error(); },
+};
+Module['FS_createDataFile'] = FS.createDataFile;
+Module['FS_createPreloadedFile'] = FS.createPreloadedFile;
+
+// include: URIUtils.js
+
+
+// Prefix of data URIs emitted by SINGLE_FILE and related options.
+var dataURIPrefix = 'data:application/octet-stream;base64,';
+
+// Indicates whether filename is a base64 data URI.
+function isDataURI(filename) {
+  // Prefix of data URIs emitted by SINGLE_FILE and related options.
+  return filename.startsWith(dataURIPrefix);
+}
+
+// Indicates whether filename is delivered via file protocol (as opposed to http/https)
+function isFileURI(filename) {
+  return filename.startsWith('file://');
+}
+
+// end include: URIUtils.js
+/** @param {boolean=} fixedasm */
+function createExportWrapper(name, fixedasm) {
+  return function() {
+    var displayName = name;
+    var asm = fixedasm;
+    {
+      asm = Module['asm'];
+    }
+    assert(runtimeInitialized, 'native function `' + displayName + '` called before runtime initialization');
+    if (!asm[name]) {
+      assert(asm[name], 'exported native function `' + displayName + '` not found');
+    }
+    return asm[name].apply(null, arguments);
+  };
+}
+
+var wasmBinaryFile;
+  wasmBinaryFile = 'crc64.wasm';
+  if (!isDataURI(wasmBinaryFile)) {
+    wasmBinaryFile = locateFile(wasmBinaryFile);
+  }
+
+var binaryInString = ["AGFzbQEAAAABzYCAgAAMYAF/AX9gAAF/YAF/AGAAAGADf35/AX5gA39/fwBgBH9/f38AYAN/f38Bf2AFf39",
+"/f38Bf2AEf39/fwF/YAR/f35/AX5gBH9+f38BfwKPgYCAAAUDZW52BWFib3J0AAMDZW52FmVtc2NyaXB0ZW",
+"5fcmVzaXplX2hlYXAAABZ3YXNpX3NuYXBzaG90X3ByZXZpZXcxCGZkX2Nsb3NlAAAWd2FzaV9zbmFwc2hvd",
+"F9wcmV2aWV3MQhmZF93cml0ZQAJFndhc2lfc25hcHNob3RfcHJldmlldzEHZmRfc2VlawAIA62AgIAALAMF",
+"BgIBAAUGAgEBAAACAAIAAAAHBAQCAgEDAAIAAQIBAQIAAQMBAQEACggLBIWAgIAAAXABBAQFh4CAgAABAYA",
+"CgIACBsiAgIAACn8BQYCAwAILfwFBAAt/AUEAC38BQQALfwBBnJHBAgt/AEGwkcECC38AQZyRwQILfwBBsJ",
+"HBAgt/AEGwkcECC38AQZKSwQILB/qEgIAAGwZtZW1vcnkCABFfX3dhc21fY2FsbF9jdG9ycwAFJWVtc2Nya",
+"XB0ZW5fYmluZF9Wb2lkUHRyX19fZGVzdHJveV9fXzAACCVlbXNjcmlwdGVuX2JpbmRfQ3JjNjRIYXNoX0Ny",
+"YzY0SGFzaF8wAAkkZW1zY3JpcHRlbl9iaW5kX0NyYzY0SGFzaF9PbkFwcGVuZF8yAAsjZW1zY3JpcHRlbl9",
+"iaW5kX0NyYzY0SGFzaF9PbkZpbmFsXzMADCdlbXNjcmlwdGVuX2JpbmRfQ3JjNjRIYXNoX19fZGVzdHJveV",
+"9fXzAADRtfX2VtX2xpYl9kZXBzX3dlYmlkbF9iaW5kZXIDBCFfX2VtX2pzX19hcnJheV9ib3VuZHNfY2hlY",
+"2tfZXJyb3IDBRlfX2luZGlyZWN0X2Z1bmN0aW9uX3RhYmxlAQAQX19lcnJub19sb2NhdGlvbgAPBmZmbHVz",
+"aAAtBm1hbGxvYwARBGZyZWUAEhVlbXNjcmlwdGVuX3N0YWNrX2luaXQAKRllbXNjcmlwdGVuX3N0YWNrX2d",
+"ldF9mcmVlACoZZW1zY3JpcHRlbl9zdGFja19nZXRfYmFzZQArGGVtc2NyaXB0ZW5fc3RhY2tfZ2V0X2VuZA",
+"AsCXN0YWNrU2F2ZQAlDHN0YWNrUmVzdG9yZQAmCnN0YWNrQWxsb2MAJxxlbXNjcmlwdGVuX3N0YWNrX2dld",
+"F9jdXJyZW50ACgTX19zdGFydF9lbV9saWJfZGVwcwMGEl9fc3RvcF9lbV9saWJfZGVwcwMHDV9fc3RhcnRf",
+"ZW1fanMDCAxfX3N0b3BfZW1fanMDCQxkeW5DYWxsX2ppamkALwmJgICAAAEAQQELAxYYGgqtkYGAACwEABA",
+"pC81IAvcCf6EFfiMAIQNBgAEhBCADIARrIQUgBSAANgJ8IAUgATYCeCAFIAI2AnQgBSgCfCEGIAUoAnghBy",
+"AFIAc2AnAgBSgCdCEIIAghCSAJrCH6AiAGKQMIIfsCIPsCIPoCfCH8AiAGIPwCNwMIIAYpAwAh/QJCfyH+A",
+"iD9AiD+AoUh/wIgBSD/AjcDaEIAIYADIAUggAM3A2AgBSgCdCEKIAUoAnQhC0EgIQwgCyAMbyENIAogDWsh",
+"DiAFIA42AlwgBSgCXCEPQcAAIRAgDyERIBAhEiARIBJPIRNBASEUIBMgFHEhFQJAIBVFDQAgBSgCcCEWIAU",
+"gFjYCWEIAIYEDIAUggQM3A1BCACGCAyAFIIIDNwNIQgAhgwMgBSCDAzcDQEIAIYQDIAUghAM3AzggBSkDYC",
+"GFAyAFKAJcIRcgFyEYIBitIYYDIIUDIIYDfCGHA0IgIYgDIIcDIIgDfSGJAyAFIIkDNwMwIAUoAlwhGSAFK",
+"AJ0IRogGiAZayEbIAUgGzYCdCAFKQNoIYoDIAUgigM3A1ACQANAIAUpA2AhiwMgBSkDMCGMAyCLAyGNAyCM",
+"AyGOAyCNAyCOA1QhHEEBIR0gHCAdcSEeIB5FDQEgBSgCWCEfIB8pAwAhjwMgBSkDUCGQAyCPAyCQA4UhkQM",
+"gBSCRAzcDKCAFKAJYISAgICkDCCGSAyAFKQNIIZMDIJIDIJMDhSGUAyAFIJQDNwMgIAUoAlghISAhKQMQIZ",
+"UDIAUpA0AhlgMglQMglgOFIZcDIAUglwM3AxggBSgCWCEiICIpAxghmAMgBSkDOCGZAyCYAyCZA4UhmgMgB",
+"SCaAzcDECAFKQMoIZsDQv8BIZwDIJsDIJwDgyGdA0KADiGeAyCdAyCeA3whnwMgnwOnISNBgIDAAiEkQQMh",
+"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"
+].join("");
+
+function _base64ToArrayBuffer(base64) {
+  var binary_string = window.atob(base64);
+  var len = binary_string.length;
+  var bytes = new Uint8Array(len);
+  for (var i = 0; i < len; i++) {
+      bytes[i] = binary_string.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function getBinary(file) {
+  if (typeof Buffer == "function"){
+    return Buffer.from(binaryInString, "base64");
+  }
+  else {
+    return _base64ToArrayBuffer(binaryInString);
+  }
+}
+
+function getBinaryPromise() {
+  // If we don't have the binary yet, try to to load it asynchronously.
+  // Fetch has some additional restrictions over XHR, like it can't be used on a file:// url.
+  // See https://github.com/github/fetch/pull/92#issuecomment-140665932
+  // Cordova or Electron apps are typically loaded from a file:// url.
+  // So use fetch if it is available and the url is not a file, otherwise fall back to XHR.
+  // if (!wasmBinary && (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER)) {
+  //   if (typeof fetch == 'function'
+  //     && !isFileURI(wasmBinaryFile)
+  //   ) {
+  //     return fetch(wasmBinaryFile, { credentials: 'same-origin' }).then(function(response) {
+  //       if (!response['ok']) {
+  //         throw "failed to load wasm binary file at '" + wasmBinaryFile + "'";
+  //       }
+  //       return response['arrayBuffer']();
+  //     }).catch(function () {
+  //         return getBinary(wasmBinaryFile);
+  //     });
+  //   }
+  //   else {
+  //     if (readAsync) {
+  //       // fetch is not available or url is file => try XHR (readAsync uses XHR internally)
+  //       return new Promise(function(resolve, reject) {
+  //         readAsync(wasmBinaryFile, function(response) { resolve(new Uint8Array(/** @type{!ArrayBuffer} */(response))) }, reject)
+  //       });
+  //     }
+  //   }
+  // }
+
+  // Otherwise, getBinary should be able to get it synchronously
+  return Promise.resolve().then(function() { return getBinary(); });
+}
+
+// Create the wasm instance.
+// Receives the wasm imports, returns the exports.
+function createWasm() {
+  // prepare imports
+  var info = {
+    'env': asmLibraryArg,
+    'wasi_snapshot_preview1': asmLibraryArg,
+  };
+  // Load the wasm module and create an instance of using native support in the JS engine.
+  // handle a generated wasm instance, receiving its exports and
+  // performing other necessary setup
+  /** @param {WebAssembly.Module=} module*/
+  function receiveInstance(instance, module) {
+    var exports = instance.exports;
+
+    Module['asm'] = exports;
+
+    wasmMemory = Module['asm']['memory'];
+    assert(wasmMemory, "memory not found in wasm exports");
+    // This assertion doesn't hold when emscripten is run in --post-link
+    // mode.
+    // TODO(sbc): Read INITIAL_MEMORY out of the wasm file in post-link mode.
+    //assert(wasmMemory.buffer.byteLength === 16777216);
+    updateGlobalBufferAndViews(wasmMemory.buffer);
+
+    wasmTable = Module['asm']['__indirect_function_table'];
+    assert(wasmTable, "table not found in wasm exports");
+
+    addOnInit(Module['asm']['__wasm_call_ctors']);
+
+    removeRunDependency('wasm-instantiate');
+
+  }
+  // we can't run yet (except in a pthread, where we have a custom sync instantiator)
+  addRunDependency('wasm-instantiate');
+
+  // Prefer streaming instantiation if available.
+  // Async compilation can be confusing when an error on the page overwrites Module
+  // (for example, if the order of elements is wrong, and the one defining Module is
+  // later), so we save Module and check it later.
+  var trueModule = Module;
+  function receiveInstantiationResult(result) {
+    // 'result' is a ResultObject object which has both the module and instance.
+    // receiveInstance() will swap in the exports (to Module.asm) so they can be called
+    assert(Module === trueModule, 'the Module object should not be replaced during async compilation - perhaps the order of HTML elements is wrong?');
+    trueModule = null;
+    // TODO: Due to Closure regression https://github.com/google/closure-compiler/issues/3193, the above line no longer optimizes out down to the following line.
+    // When the regression is fixed, can restore the above USE_PTHREADS-enabled path.
+    receiveInstance(result['instance']);
+  }
+
+  function instantiateArrayBuffer(receiver) {
+    return getBinaryPromise().then(function(binary) {
+      return WebAssembly.instantiate(binary, info);
+    }).then(function (instance) {
+      return instance;
+    }).then(receiver, function(reason) {
+      err('failed to asynchronously prepare wasm: ' + reason);
+
+      // Warn on some common problems.
+      if (isFileURI(wasmBinaryFile)) {
+        err('warning: Loading from a file URI (' + wasmBinaryFile + ') is not supported in most browsers. See https://emscripten.org/docs/getting_started/FAQ.html#how-do-i-run-a-local-webserver-for-testing-why-does-my-program-stall-in-downloading-or-preparing');
+      }
+      abort(reason);
+    });
+  }
+
+  function instantiateAsync() {
+    // if (!wasmBinary &&
+    //     typeof WebAssembly.instantiateStreaming == 'function' &&
+    //     !isDataURI(wasmBinaryFile) &&
+    //     // Don't use streaming for file:// delivered objects in a webview, fetch them synchronously.
+    //     !isFileURI(wasmBinaryFile) &&
+    //     // Avoid instantiateStreaming() on Node.js environment for now, as while
+    //     // Node.js v18.1.0 implements it, it does not have a full fetch()
+    //     // implementation yet.
+    //     //
+    //     // Reference:
+    //     //   https://github.com/emscripten-core/emscripten/pull/16917
+    //     !ENVIRONMENT_IS_NODE &&
+    //     typeof fetch == 'function') {
+    //   return fetch(wasmBinaryFile, { credentials: 'same-origin' }).then(function(response) {
+    //     // Suppress closure warning here since the upstream definition for
+    //     // instantiateStreaming only allows Promise<Repsponse> rather than
+    //     // an actual Response.
+    //     // TODO(https://github.com/google/closure-compiler/pull/3913): Remove if/when upstream closure is fixed.
+    //     /** @suppress {checkTypes} */
+    //     var result = WebAssembly.instantiateStreaming(response, info);
+
+    //     return result.then(
+    //       receiveInstantiationResult,
+    //       function(reason) {
+    //         // We expect the most common failure cause to be a bad MIME type for the binary,
+    //         // in which case falling back to ArrayBuffer instantiation should work.
+    //         err('wasm streaming compile failed: ' + reason);
+    //         err('falling back to ArrayBuffer instantiation');
+    //         return instantiateArrayBuffer(receiveInstantiationResult);
+    //       });
+    //   });
+    // } else {
+      return instantiateArrayBuffer(receiveInstantiationResult);
+    //}
+  }
+
+  // User shell pages can write their own Module.instantiateWasm = function(imports, successCallback) callback
+  // to manually instantiate the Wasm module themselves. This allows pages to run the instantiation parallel
+  // to any other async startup actions they are performing.
+  // Also pthreads and wasm workers initialize the wasm instance through this path.
+  if (Module['instantiateWasm']) {
+    try {
+      var exports = Module['instantiateWasm'](info, receiveInstance);
+      return exports;
+    } catch(e) {
+      err('Module.instantiateWasm callback failed with error: ' + e);
+        // If instantiation fails, reject the module ready promise.
+        readyPromiseReject(e);
+    }
+  }
+
+  // If instantiation fails, reject the module ready promise.
+  instantiateAsync().catch(readyPromiseReject);
+  return {}; // no exports yet; we'll fill them in later
+}
+function array_bounds_check_error(idx,size) { throw 'Array index ' + idx + ' out of bounds: [0,' + size + ')'; }
+
+
+
+
+  /** @constructor */
+  function ExitStatus(status) {
+      this.name = 'ExitStatus';
+      this.message = 'Program terminated with exit(' + status + ')';
+      this.status = status;
+    }
+
+  function callRuntimeCallbacks(callbacks) {
+      while (callbacks.length > 0) {
+        // Pass the module as the first argument.
+        callbacks.shift()(Module);
+      }
+    }
+
+  function ptrToString(ptr) {
+      return '0x' + ptr.toString(16).padStart(8, '0');
+    }
+
+  function warnOnce(text) {
+      if (!warnOnce.shown) warnOnce.shown = {};
+      if (!warnOnce.shown[text]) {
+        warnOnce.shown[text] = 1;
+        if (ENVIRONMENT_IS_NODE) text = 'warning: ' + text;
+        err(text);
+      }
+    }
+
+  function _abort() {
+      abort('native code called abort()');
+    }
+
+  function getHeapMax() {
+      // Stay one Wasm page short of 4GB: while e.g. Chrome is able to allocate
+      // full 4GB Wasm memories, the size will wrap back to 0 bytes in Wasm side
+      // for any code that deals with heap sizes, which would require special
+      // casing all heap size related code to treat 0 specially.
+      return 2147483648;
+    }
+  
+  function emscripten_realloc_buffer(size) {
+      try {
+        // round size grow request up to wasm page size (fixed 64KB per spec)
+        wasmMemory.grow((size - buffer.byteLength + 65535) >>> 16); // .grow() takes a delta compared to the previous size
+        updateGlobalBufferAndViews(wasmMemory.buffer);
+        return 1 /*success*/;
+      } catch(e) {
+        err('emscripten_realloc_buffer: Attempted to grow heap from ' + buffer.byteLength  + ' bytes to ' + size + ' bytes, but got error: ' + e);
+      }
+      // implicit 0 return to save code size (caller will cast "undefined" into 0
+      // anyhow)
+    }
+  function _emscripten_resize_heap(requestedSize) {
+      var oldSize = HEAPU8.length;
+      requestedSize = requestedSize >>> 0;
+      // With multithreaded builds, races can happen (another thread might increase the size
+      // in between), so return a failure, and let the caller retry.
+      assert(requestedSize > oldSize);
+  
+      // Memory resize rules:
+      // 1.  Always increase heap size to at least the requested size, rounded up
+      //     to next page multiple.
+      // 2a. If MEMORY_GROWTH_LINEAR_STEP == -1, excessively resize the heap
+      //     geometrically: increase the heap size according to
+      //     MEMORY_GROWTH_GEOMETRIC_STEP factor (default +20%), At most
+      //     overreserve by MEMORY_GROWTH_GEOMETRIC_CAP bytes (default 96MB).
+      // 2b. If MEMORY_GROWTH_LINEAR_STEP != -1, excessively resize the heap
+      //     linearly: increase the heap size by at least
+      //     MEMORY_GROWTH_LINEAR_STEP bytes.
+      // 3.  Max size for the heap is capped at 2048MB-WASM_PAGE_SIZE, or by
+      //     MAXIMUM_MEMORY, or by ASAN limit, depending on which is smallest
+      // 4.  If we were unable to allocate as much memory, it may be due to
+      //     over-eager decision to excessively reserve due to (3) above.
+      //     Hence if an allocation fails, cut down on the amount of excess
+      //     growth, in an attempt to succeed to perform a smaller allocation.
+  
+      // A limit is set for how much we can grow. We should not exceed that
+      // (the wasm binary specifies it, so if we tried, we'd fail anyhow).
+      var maxHeapSize = getHeapMax();
+      if (requestedSize > maxHeapSize) {
+        err('Cannot enlarge memory, asked to go up to ' + requestedSize + ' bytes, but the limit is ' + maxHeapSize + ' bytes!');
+        return false;
+      }
+  
+      let alignUp = (x, multiple) => x + (multiple - x % multiple) % multiple;
+  
+      // Loop through potential heap size increases. If we attempt a too eager
+      // reservation that fails, cut down on the attempted size and reserve a
+      // smaller bump instead. (max 3 times, chosen somewhat arbitrarily)
+      for (var cutDown = 1; cutDown <= 4; cutDown *= 2) {
+        var overGrownHeapSize = oldSize * (1 + 0.2 / cutDown); // ensure geometric growth
+        // but limit overreserving (default to capping at +96MB overgrowth at most)
+        overGrownHeapSize = Math.min(overGrownHeapSize, requestedSize + 100663296 );
+  
+        var newSize = Math.min(maxHeapSize, alignUp(Math.max(requestedSize, overGrownHeapSize), 65536));
+  
+        var replacement = emscripten_realloc_buffer(newSize);
+        if (replacement) {
+  
+          return true;
+        }
+      }
+      err('Failed to grow the heap from ' + oldSize + ' bytes to ' + newSize + ' bytes, not enough memory!');
+      return false;
+    }
+  function _fd_close(fd) {
+      abort('fd_close called without SYSCALLS_REQUIRE_FILESYSTEM');
+    }
+  function _fd_seek(fd, offset_low, offset_high, whence, newOffset) {
+      return 70;
+    }
+
+  var printCharBuffers = [null,[],[]];
+  function printChar(stream, curr) {
+      var buffer = printCharBuffers[stream];
+      assert(buffer);
+      if (curr === 0 || curr === 10) {
+        (stream === 1 ? out : err)(UTF8ArrayToString(buffer, 0));
+        buffer.length = 0;
+      } else {
+        buffer.push(curr);
+      }
+    }
+  function _fd_write(fd, iov, iovcnt, pnum) {
+      // hack to support printf in SYSCALLS_REQUIRE_FILESYSTEM=0
+      var num = 0;
+      for (var i = 0; i < iovcnt; i++) {
+        var ptr = HEAPU32[((iov)>>2)];
+        var len = HEAPU32[(((iov)+(4))>>2)];
+        iov += 8;
+        for (var j = 0; j < len; j++) {
+          printChar(fd, HEAPU8[ptr+j]);
+        }
+        num += len;
+      }
+      HEAPU32[((pnum)>>2)] = num;
+      return 0;
+    }
+
+function checkIncomingModuleAPI() {
+  ignoredModuleProp('fetchSettings');
+}
+var asmLibraryArg = {
+  "abort": _abort,
+  "array_bounds_check_error": array_bounds_check_error,
+  "emscripten_resize_heap": _emscripten_resize_heap,
+  "fd_close": _fd_close,
+  "fd_seek": _fd_seek,
+  "fd_write": _fd_write
+};
+createWasm();
+/** @type {function(...*):?} */
+Module["___wasm_call_ctors"] = createExportWrapper("__wasm_call_ctors");
+
+/** @type {function(...*):?} */
+var _emscripten_bind_VoidPtr___destroy___0 = Module["_emscripten_bind_VoidPtr___destroy___0"] = createExportWrapper("emscripten_bind_VoidPtr___destroy___0");
+
+/** @type {function(...*):?} */
+var _emscripten_bind_Crc64Hash_Crc64Hash_0 = Module["_emscripten_bind_Crc64Hash_Crc64Hash_0"] = createExportWrapper("emscripten_bind_Crc64Hash_Crc64Hash_0");
+
+/** @type {function(...*):?} */
+var _emscripten_bind_Crc64Hash_OnAppend_2 = Module["_emscripten_bind_Crc64Hash_OnAppend_2"] = createExportWrapper("emscripten_bind_Crc64Hash_OnAppend_2");
+
+/** @type {function(...*):?} */
+var _emscripten_bind_Crc64Hash_OnFinal_3 = Module["_emscripten_bind_Crc64Hash_OnFinal_3"] = createExportWrapper("emscripten_bind_Crc64Hash_OnFinal_3");
+
+/** @type {function(...*):?} */
+var _emscripten_bind_Crc64Hash___destroy___0 = Module["_emscripten_bind_Crc64Hash___destroy___0"] = createExportWrapper("emscripten_bind_Crc64Hash___destroy___0");
+
+/** @type {function(...*):?} */
+Module["___errno_location"] = createExportWrapper("__errno_location");
+
+/** @type {function(...*):?} */
+Module["_fflush"] = createExportWrapper("fflush");
+
+/** @type {function(...*):?} */
+Module["_malloc"] = createExportWrapper("malloc");
+
+/** @type {function(...*):?} */
+Module["_free"] = createExportWrapper("free");
+
+/** @type {function(...*):?} */
+var _emscripten_stack_init = Module["_emscripten_stack_init"] = function() {
+  return (_emscripten_stack_init = Module["_emscripten_stack_init"] = Module["asm"]["emscripten_stack_init"]).apply(null, arguments);
+};
+
+/** @type {function(...*):?} */
+Module["_emscripten_stack_get_free"] = function() {
+  return (Module["_emscripten_stack_get_free"] = Module["asm"]["emscripten_stack_get_free"]).apply(null, arguments);
+};
+
+/** @type {function(...*):?} */
+Module["_emscripten_stack_get_base"] = function() {
+  return (Module["_emscripten_stack_get_base"] = Module["asm"]["emscripten_stack_get_base"]).apply(null, arguments);
+};
+
+/** @type {function(...*):?} */
+var _emscripten_stack_get_end = Module["_emscripten_stack_get_end"] = function() {
+  return (_emscripten_stack_get_end = Module["_emscripten_stack_get_end"] = Module["asm"]["emscripten_stack_get_end"]).apply(null, arguments);
+};
+
+/** @type {function(...*):?} */
+Module["stackSave"] = createExportWrapper("stackSave");
+
+/** @type {function(...*):?} */
+Module["stackRestore"] = createExportWrapper("stackRestore");
+
+/** @type {function(...*):?} */
+Module["stackAlloc"] = createExportWrapper("stackAlloc");
+
+/** @type {function(...*):?} */
+Module["_emscripten_stack_get_current"] = function() {
+  return (Module["_emscripten_stack_get_current"] = Module["asm"]["emscripten_stack_get_current"]).apply(null, arguments);
+};
+
+/** @type {function(...*):?} */
+Module["dynCall_jiji"] = createExportWrapper("dynCall_jiji");
+
+Module['___start_em_js'] = 5261488;
+Module['___stop_em_js'] = 5261586;
+
+
+
+// === Auto-generated postamble setup entry stuff ===
+
+
+var unexportedRuntimeSymbols = [
+  'run',
+  'UTF8ArrayToString',
+  'UTF8ToString',
+  'stringToUTF8Array',
+  'stringToUTF8',
+  'lengthBytesUTF8',
+  'addOnPreRun',
+  'addOnInit',
+  'addOnPreMain',
+  'addOnExit',
+  'addOnPostRun',
+  'addRunDependency',
+  'removeRunDependency',
+  'FS_createFolder',
+  'FS_createPath',
+  'FS_createDataFile',
+  'FS_createPreloadedFile',
+  'FS_createLazyFile',
+  'FS_createLink',
+  'FS_createDevice',
+  'FS_unlink',
+  'getLEB',
+  'getFunctionTables',
+  'alignFunctionTables',
+  'registerFunctions',
+  'prettyPrint',
+  'getCompilerSetting',
+  'out',
+  'err',
+  'callMain',
+  'abort',
+  'keepRuntimeAlive',
+  'wasmMemory',
+  'stackAlloc',
+  'stackSave',
+  'stackRestore',
+  'getTempRet0',
+  'setTempRet0',
+  'writeStackCookie',
+  'checkStackCookie',
+  'ptrToString',
+  'zeroMemory',
+  'stringToNewUTF8',
+  'exitJS',
+  'getHeapMax',
+  'emscripten_realloc_buffer',
+  'ENV',
+  'ERRNO_CODES',
+  'ERRNO_MESSAGES',
+  'setErrNo',
+  'inetPton4',
+  'inetNtop4',
+  'inetPton6',
+  'inetNtop6',
+  'readSockaddr',
+  'writeSockaddr',
+  'DNS',
+  'getHostByName',
+  'Protocols',
+  'Sockets',
+  'getRandomDevice',
+  'warnOnce',
+  'traverseStack',
+  'UNWIND_CACHE',
+  'convertPCtoSourceLocation',
+  'readEmAsmArgsArray',
+  'readEmAsmArgs',
+  'runEmAsmFunction',
+  'runMainThreadEmAsm',
+  'jstoi_q',
+  'jstoi_s',
+  'getExecutableName',
+  'listenOnce',
+  'autoResumeAudioContext',
+  'dynCallLegacy',
+  'getDynCaller',
+  'dynCall',
+  'handleException',
+  'runtimeKeepalivePush',
+  'runtimeKeepalivePop',
+  'callUserCallback',
+  'maybeExit',
+  'safeSetTimeout',
+  'asmjsMangle',
+  'asyncLoad',
+  'alignMemory',
+  'mmapAlloc',
+  'writeI53ToI64',
+  'writeI53ToI64Clamped',
+  'writeI53ToI64Signaling',
+  'writeI53ToU64Clamped',
+  'writeI53ToU64Signaling',
+  'readI53FromI64',
+  'readI53FromU64',
+  'convertI32PairToI53',
+  'convertI32PairToI53Checked',
+  'convertU32PairToI53',
+  'getCFunc',
+  'ccall',
+  'cwrap',
+  'uleb128Encode',
+  'sigToWasmTypes',
+  'generateFuncType',
+  'convertJsFunctionToWasm',
+  'freeTableIndexes',
+  'functionsInTableMap',
+  'getEmptyTableSlot',
+  'updateTableMap',
+  'addFunction',
+  'removeFunction',
+  'reallyNegative',
+  'unSign',
+  'strLen',
+  'reSign',
+  'formatString',
+  'setValue',
+  'getValue',
+  'PATH',
+  'PATH_FS',
+  'intArrayFromString',
+  'intArrayToString',
+  'AsciiToString',
+  'stringToAscii',
+  'UTF16Decoder',
+  'UTF16ToString',
+  'stringToUTF16',
+  'lengthBytesUTF16',
+  'UTF32ToString',
+  'stringToUTF32',
+  'lengthBytesUTF32',
+  'allocateUTF8',
+  'allocateUTF8OnStack',
+  'writeStringToMemory',
+  'writeArrayToMemory',
+  'writeAsciiToMemory',
+  'SYSCALLS',
+  'getSocketFromFD',
+  'getSocketAddress',
+  'JSEvents',
+  'registerKeyEventCallback',
+  'specialHTMLTargets',
+  'maybeCStringToJsString',
+  'findEventTarget',
+  'findCanvasEventTarget',
+  'getBoundingClientRect',
+  'fillMouseEventData',
+  'registerMouseEventCallback',
+  'registerWheelEventCallback',
+  'registerUiEventCallback',
+  'registerFocusEventCallback',
+  'fillDeviceOrientationEventData',
+  'registerDeviceOrientationEventCallback',
+  'fillDeviceMotionEventData',
+  'registerDeviceMotionEventCallback',
+  'screenOrientation',
+  'fillOrientationChangeEventData',
+  'registerOrientationChangeEventCallback',
+  'fillFullscreenChangeEventData',
+  'registerFullscreenChangeEventCallback',
+  'JSEvents_requestFullscreen',
+  'JSEvents_resizeCanvasForFullscreen',
+  'registerRestoreOldStyle',
+  'hideEverythingExceptGivenElement',
+  'restoreHiddenElements',
+  'setLetterbox',
+  'currentFullscreenStrategy',
+  'restoreOldWindowedStyle',
+  'softFullscreenResizeWebGLRenderTarget',
+  'doRequestFullscreen',
+  'fillPointerlockChangeEventData',
+  'registerPointerlockChangeEventCallback',
+  'registerPointerlockErrorEventCallback',
+  'requestPointerLock',
+  'fillVisibilityChangeEventData',
+  'registerVisibilityChangeEventCallback',
+  'registerTouchEventCallback',
+  'fillGamepadEventData',
+  'registerGamepadEventCallback',
+  'registerBeforeUnloadEventCallback',
+  'fillBatteryEventData',
+  'battery',
+  'registerBatteryEventCallback',
+  'setCanvasElementSize',
+  'getCanvasElementSize',
+  'demangle',
+  'demangleAll',
+  'jsStackTrace',
+  'stackTrace',
+  'ExitStatus',
+  'getEnvStrings',
+  'checkWasiClock',
+  'flush_NO_FILESYSTEM',
+  'dlopenMissingError',
+  'createDyncallWrapper',
+  'setImmediateWrapped',
+  'clearImmediateWrapped',
+  'polyfillSetImmediate',
+  'uncaughtExceptionCount',
+  'exceptionLast',
+  'exceptionCaught',
+  'ExceptionInfo',
+  'exception_addRef',
+  'exception_decRef',
+  'Browser',
+  'setMainLoop',
+  'wget',
+  'FS',
+  'MEMFS',
+  'TTY',
+  'PIPEFS',
+  'SOCKFS',
+  '_setNetworkCallback',
+  'tempFixedLengthArray',
+  'miniTempWebGLFloatBuffers',
+  'heapObjectForWebGLType',
+  'heapAccessShiftForWebGLHeap',
+  'GL',
+  'emscriptenWebGLGet',
+  'computeUnpackAlignedImageSize',
+  'emscriptenWebGLGetTexPixelData',
+  'emscriptenWebGLGetUniform',
+  'webglGetUniformLocation',
+  'webglPrepareUniformLocationsBeforeFirstUse',
+  'webglGetLeftBracePos',
+  'emscriptenWebGLGetVertexAttrib',
+  'writeGLArray',
+  'AL',
+  'SDL_unicode',
+  'SDL_ttfContext',
+  'SDL_audio',
+  'SDL',
+  'SDL_gfx',
+  'GLUT',
+  'EGL',
+  'GLFW_Window',
+  'GLFW',
+  'GLEW',
+  'IDBStore',
+  'runAndAbortIfError',
+  'ALLOC_NORMAL',
+  'ALLOC_STACK',
+  'allocate',
+];
+unexportedRuntimeSymbols.forEach(unexportedRuntimeSymbol);
+var missingLibrarySymbols = [
+  'zeroMemory',
+  'stringToNewUTF8',
+  'exitJS',
+  'setErrNo',
+  'inetPton4',
+  'inetNtop4',
+  'inetPton6',
+  'inetNtop6',
+  'readSockaddr',
+  'writeSockaddr',
+  'getHostByName',
+  'getRandomDevice',
+  'traverseStack',
+  'convertPCtoSourceLocation',
+  'readEmAsmArgs',
+  'runEmAsmFunction',
+  'runMainThreadEmAsm',
+  'jstoi_q',
+  'jstoi_s',
+  'getExecutableName',
+  'listenOnce',
+  'autoResumeAudioContext',
+  'dynCallLegacy',
+  'getDynCaller',
+  'dynCall',
+  'handleException',
+  'runtimeKeepalivePush',
+  'runtimeKeepalivePop',
+  'callUserCallback',
+  'maybeExit',
+  'safeSetTimeout',
+  'asmjsMangle',
+  'asyncLoad',
+  'alignMemory',
+  'mmapAlloc',
+  'writeI53ToI64',
+  'writeI53ToI64Clamped',
+  'writeI53ToI64Signaling',
+  'writeI53ToU64Clamped',
+  'writeI53ToU64Signaling',
+  'readI53FromI64',
+  'readI53FromU64',
+  'convertI32PairToI53',
+  'convertU32PairToI53',
+  'getCFunc',
+  'ccall',
+  'cwrap',
+  'uleb128Encode',
+  'sigToWasmTypes',
+  'generateFuncType',
+  'convertJsFunctionToWasm',
+  'getEmptyTableSlot',
+  'updateTableMap',
+  'addFunction',
+  'removeFunction',
+  'reallyNegative',
+  'unSign',
+  'strLen',
+  'reSign',
+  'formatString',
+  'intArrayToString',
+  'AsciiToString',
+  'stringToAscii',
+  'UTF16ToString',
+  'stringToUTF16',
+  'lengthBytesUTF16',
+  'UTF32ToString',
+  'stringToUTF32',
+  'lengthBytesUTF32',
+  'allocateUTF8',
+  'allocateUTF8OnStack',
+  'writeStringToMemory',
+  'writeArrayToMemory',
+  'writeAsciiToMemory',
+  'getSocketFromFD',
+  'getSocketAddress',
+  'registerKeyEventCallback',
+  'maybeCStringToJsString',
+  'findEventTarget',
+  'findCanvasEventTarget',
+  'getBoundingClientRect',
+  'fillMouseEventData',
+  'registerMouseEventCallback',
+  'registerWheelEventCallback',
+  'registerUiEventCallback',
+  'registerFocusEventCallback',
+  'fillDeviceOrientationEventData',
+  'registerDeviceOrientationEventCallback',
+  'fillDeviceMotionEventData',
+  'registerDeviceMotionEventCallback',
+  'screenOrientation',
+  'fillOrientationChangeEventData',
+  'registerOrientationChangeEventCallback',
+  'fillFullscreenChangeEventData',
+  'registerFullscreenChangeEventCallback',
+  'JSEvents_requestFullscreen',
+  'JSEvents_resizeCanvasForFullscreen',
+  'registerRestoreOldStyle',
+  'hideEverythingExceptGivenElement',
+  'restoreHiddenElements',
+  'setLetterbox',
+  'softFullscreenResizeWebGLRenderTarget',
+  'doRequestFullscreen',
+  'fillPointerlockChangeEventData',
+  'registerPointerlockChangeEventCallback',
+  'registerPointerlockErrorEventCallback',
+  'requestPointerLock',
+  'fillVisibilityChangeEventData',
+  'registerVisibilityChangeEventCallback',
+  'registerTouchEventCallback',
+  'fillGamepadEventData',
+  'registerGamepadEventCallback',
+  'registerBeforeUnloadEventCallback',
+  'fillBatteryEventData',
+  'battery',
+  'registerBatteryEventCallback',
+  'setCanvasElementSize',
+  'getCanvasElementSize',
+  'demangle',
+  'demangleAll',
+  'jsStackTrace',
+  'stackTrace',
+  'getEnvStrings',
+  'checkWasiClock',
+  'createDyncallWrapper',
+  'setImmediateWrapped',
+  'clearImmediateWrapped',
+  'polyfillSetImmediate',
+  'ExceptionInfo',
+  'exception_addRef',
+  'exception_decRef',
+  'setMainLoop',
+  '_setNetworkCallback',
+  'heapObjectForWebGLType',
+  'heapAccessShiftForWebGLHeap',
+  'emscriptenWebGLGet',
+  'computeUnpackAlignedImageSize',
+  'emscriptenWebGLGetTexPixelData',
+  'emscriptenWebGLGetUniform',
+  'webglGetUniformLocation',
+  'webglPrepareUniformLocationsBeforeFirstUse',
+  'webglGetLeftBracePos',
+  'emscriptenWebGLGetVertexAttrib',
+  'writeGLArray',
+  'SDL_unicode',
+  'SDL_ttfContext',
+  'SDL_audio',
+  'GLFW_Window',
+  'runAndAbortIfError',
+  'ALLOC_NORMAL',
+  'ALLOC_STACK',
+  'allocate',
+];
+missingLibrarySymbols.forEach(missingLibrarySymbol);
+
+
+var calledRun;
+
+dependenciesFulfilled = function runCaller() {
+  // If run has never been called, and we should call run (INVOKE_RUN is true, and Module.noInitialRun is not false)
+  if (!calledRun) run();
+  if (!calledRun) dependenciesFulfilled = runCaller; // try this again later, after new deps are fulfilled
+};
+
+function stackCheckInit() {
+  // This is normally called automatically during __wasm_call_ctors but need to
+  // get these values before even running any of the ctors so we call it redundantly
+  // here.
+  _emscripten_stack_init();
+  // TODO(sbc): Move writeStackCookie to native to to avoid this.
+  writeStackCookie();
+}
+
+/** @type {function(Array=)} */
+function run(args) {
+
+  if (runDependencies > 0) {
+    return;
+  }
+
+    stackCheckInit();
+
+  preRun();
+
+  // a preRun added a dependency, run will be called later
+  if (runDependencies > 0) {
+    return;
+  }
+
+  function doRun() {
+    // run may have just been called through dependencies being fulfilled just in this very frame,
+    // or while the async setStatus time below was happening
+    if (calledRun) return;
+    calledRun = true;
+    Module['calledRun'] = true;
+
+    if (ABORT) return;
+
+    initRuntime();
+
+    readyPromiseResolve(Module);
+    if (Module['onRuntimeInitialized']) Module['onRuntimeInitialized']();
+
+    assert(!Module['_main'], 'compiled without a main, but one is present. if you added it from JS, use Module["onRuntimeInitialized"]');
+
+    postRun();
+  }
+
+  if (Module['setStatus']) {
+    Module['setStatus']('Running...');
+    setTimeout(function() {
+      setTimeout(function() {
+        Module['setStatus']('');
+      }, 1);
+      doRun();
+    }, 1);
+  } else
+  {
+    doRun();
+  }
+  checkStackCookie();
+}
+
+if (Module['preInit']) {
+  if (typeof Module['preInit'] == 'function') Module['preInit'] = [Module['preInit']];
+  while (Module['preInit'].length > 0) {
+    Module['preInit'].pop()();
+  }
+}
+
+run();
+
+
+
+
+
+
+// Bindings utilities
+
+/** @suppress {duplicate} (TODO: avoid emitting this multiple times, it is redundant) */
+function WrapperObject() {
+}
+WrapperObject.prototype = Object.create(WrapperObject.prototype);
+WrapperObject.prototype.constructor = WrapperObject;
+WrapperObject.prototype.__class__ = WrapperObject;
+WrapperObject.__cache__ = {};
+Module['WrapperObject'] = WrapperObject;
+
+/** @suppress {duplicate} (TODO: avoid emitting this multiple times, it is redundant)
+    @param {*=} __class__ */
+function getCache(__class__) {
+  return (__class__ || WrapperObject).__cache__;
+}
+Module['getCache'] = getCache;
+
+/** @suppress {duplicate} (TODO: avoid emitting this multiple times, it is redundant)
+    @param {*=} __class__ */
+function wrapPointer(ptr, __class__) {
+  var cache = getCache(__class__);
+  var ret = cache[ptr];
+  if (ret) return ret;
+  ret = Object.create((__class__ || WrapperObject).prototype);
+  ret.ptr = ptr;
+  return cache[ptr] = ret;
+}
+Module['wrapPointer'] = wrapPointer;
+
+/** @suppress {duplicate} (TODO: avoid emitting this multiple times, it is redundant) */
+function castObject(obj, __class__) {
+  return wrapPointer(obj.ptr, __class__);
+}
+Module['castObject'] = castObject;
+
+Module['NULL'] = wrapPointer(0);
+
+/** @suppress {duplicate} (TODO: avoid emitting this multiple times, it is redundant) */
+function destroy(obj) {
+  if (!obj['__destroy__']) throw 'Error: Cannot destroy object. (Did you create it yourself?)';
+  obj['__destroy__']();
+  // Remove from cache, so the object can be GC'd and refs added onto it released
+  delete getCache(obj.__class__)[obj.ptr];
+}
+Module['destroy'] = destroy;
+
+/** @suppress {duplicate} (TODO: avoid emitting this multiple times, it is redundant) */
+function compare(obj1, obj2) {
+  return obj1.ptr === obj2.ptr;
+}
+Module['compare'] = compare;
+
+/** @suppress {duplicate} (TODO: avoid emitting this multiple times, it is redundant) */
+function getPointer(obj) {
+  return obj.ptr;
+}
+Module['getPointer'] = getPointer;
+
+/** @suppress {duplicate} (TODO: avoid emitting this multiple times, it is redundant) */
+function getClass(obj) {
+  return obj.__class__;
+}
+Module['getClass'] = getClass;
+
+
+// VoidPtr
+/** @suppress {undefinedVars, duplicate} @this{Object} */function VoidPtr() { throw "cannot construct a VoidPtr, no constructor in IDL" }
+VoidPtr.prototype = Object.create(WrapperObject.prototype);
+VoidPtr.prototype.constructor = VoidPtr;
+VoidPtr.prototype.__class__ = VoidPtr;
+VoidPtr.__cache__ = {};
+Module['VoidPtr'] = VoidPtr;
+
+  VoidPtr.prototype['__destroy__'] = VoidPtr.prototype.__destroy__ = /** @suppress {undefinedVars, duplicate} @this{Object} */function() {
+  var self = this.ptr;
+  _emscripten_bind_VoidPtr___destroy___0(self);
+};
+// Crc64Hash
+/** @suppress {undefinedVars, duplicate} @this{Object} */function Crc64Hash() {
+  this.ptr = _emscripten_bind_Crc64Hash_Crc64Hash_0();
+  getCache(Crc64Hash)[this.ptr] = this;
+}Crc64Hash.prototype = Object.create(WrapperObject.prototype);
+Crc64Hash.prototype.constructor = Crc64Hash;
+Crc64Hash.prototype.__class__ = Crc64Hash;
+Crc64Hash.__cache__ = {};
+Module['Crc64Hash'] = Crc64Hash;
+
+Crc64Hash.prototype['OnAppend'] = Crc64Hash.prototype.OnAppend = /** @suppress {undefinedVars, duplicate} @this{Object} */function(data, length) {
+  var self = this.ptr;
+  if (data && typeof data === 'object') data = data.ptr;
+  if (length && typeof length === 'object') length = length.ptr;
+  _emscripten_bind_Crc64Hash_OnAppend_2(self, data, length);
+};
+Crc64Hash.prototype['OnFinal'] = Crc64Hash.prototype.OnFinal = /** @suppress {undefinedVars, duplicate} @this{Object} */function(data, length, result) {
+  var self = this.ptr;
+  if (data && typeof data === 'object') data = data.ptr;
+  if (length && typeof length === 'object') length = length.ptr;
+  if (result && typeof result === 'object') result = result.ptr;
+  _emscripten_bind_Crc64Hash_OnFinal_3(self, data, length, result);
+};
+  Crc64Hash.prototype['__destroy__'] = Crc64Hash.prototype.__destroy__ = /** @suppress {undefinedVars, duplicate} @this{Object} */function() {
+  var self = this.ptr;
+  _emscripten_bind_Crc64Hash___destroy___0(self);
+};
+
+  return NativeCRC64.ready
+}
+);
+})();
+// ESM-EXPORT-END
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+// @ts-expect-error the crc64 js file is auto generated
+/**
+ * Class used to calculator CRC64 checksum
+ */
+class StorageCRC64Calculator {
+    nativeCrc64Hash;
+    static nativeInstance;
+    constructor() {
+        this.nativeCrc64Hash = new StorageCRC64Calculator.nativeInstance.Crc64Hash();
+    }
+    static initPromise;
+    /**
+     * Initialize environment for CRC64 checksum calculator
+     */
+    static async init() {
+        if (!this.initPromise) {
+            this.initPromise = NativeCRC64().then((instance) => {
+                this.nativeInstance = instance;
+                return;
+            });
+        }
+        return this.initPromise;
+    }
+    /**
+     * Append data for CRC64 checksum calculator
+     * @param body - content to be append
+     * @param length - length of the content
+     */
+    append(body, length) {
+        const ptr = StorageCRC64Calculator.nativeInstance._malloc(length);
+        StorageCRC64Calculator.nativeInstance.HEAPU8.set(body, ptr);
+        this.nativeCrc64Hash.OnAppend(ptr, length);
+        StorageCRC64Calculator.nativeInstance._free(ptr);
+    }
+    /**
+     * Complete CRC64 checksum calculating and get the final result.
+     * @param body -
+     * @param length -
+     * @returns
+     */
+    final(body, length) {
+        const ptr = StorageCRC64Calculator.nativeInstance._malloc(length);
+        StorageCRC64Calculator.nativeInstance.HEAPU8.set(body, ptr);
+        const result = StorageCRC64Calculator.nativeInstance._malloc(8);
+        this.nativeCrc64Hash.OnFinal(ptr, length, result);
+        StorageCRC64Calculator.nativeInstance._free(ptr);
+        const resultArray = new Uint8Array(8);
+        resultArray.set(StorageCRC64Calculator.nativeInstance.HEAPU8.subarray(result, result + 8));
+        StorageCRC64Calculator.nativeInstance._free(result);
+        return resultArray;
+    }
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * Signals the end of a stream by pushing null.
+ * In Node.js, this is required to signal the end of a Readable stream.
+ * @internal
+ */
+function signalStreamEnd(pushData) {
+    pushData(null);
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+const MESSAGE_VERSION$1 = 1;
+const MESSAGE_HEADER_LENGTH$1 = 13;
+const SEGMENT_HEADER_LENGTH$1 = 10;
+const FOOTER_LENGTH$1 = 8;
+const MAX_SEGMENT_CONTENT_LENGTH = 4 * 1024 * 1024;
+var SMRegion$1;
+(function (SMRegion) {
+    SMRegion[SMRegion["StreamHeader"] = 0] = "StreamHeader";
+    SMRegion[SMRegion["StreamFooter"] = 1] = "StreamFooter";
+    SMRegion[SMRegion["SegmentHeader"] = 2] = "SegmentHeader";
+    SMRegion[SMRegion["SegmentFooter"] = 3] = "SegmentFooter";
+    SMRegion[SMRegion["SegmentContent"] = 4] = "SegmentContent";
+    SMRegion[SMRegion["Completed"] = 5] = "Completed";
+})(SMRegion$1 || (SMRegion$1 = {}));
+class StructuredMessageEncoding {
+    pushData;
+    contentLength;
+    messageLength;
+    constructor(pushData, contentLength) {
+        this.pushData = pushData;
+        this.contentLength = contentLength;
+        this.contentOffset = 0;
+        this.currentDataOffset = 0;
+        this.segmentsCount = Math.ceil(this.contentLength / MAX_SEGMENT_CONTENT_LENGTH);
+        this.messageLength =
+            this.contentLength +
+                MESSAGE_HEADER_LENGTH$1 +
+                (SEGMENT_HEADER_LENGTH$1 + FOOTER_LENGTH$1) * this.segmentsCount +
+                FOOTER_LENGTH$1;
+        this.messageHeaderBuffer = new Uint8Array(MESSAGE_HEADER_LENGTH$1);
+        this.segmentNumber = 0;
+        this.segmentContentLength = 0;
+        this.segmentContentOffset = 0;
+        this.state = SMRegion$1.StreamHeader;
+        this.segmentCrc64 = new StorageCRC64Calculator();
+        this.messageCrc64 = new StorageCRC64Calculator();
+    }
+    currentDataOffset;
+    contentOffset;
+    segmentsCount;
+    messageHeaderBuffer;
+    segmentNumber;
+    segmentContentLength;
+    segmentContentOffset;
+    segmentCrc64;
+    messageCrc64;
+    state;
+    sourceDataHandler = (data) => {
+        this.currentDataOffset = 0;
+        if (this.state === SMRegion$1.StreamHeader) {
+            this.handlingMessageHeader();
+        }
+        while (this.segmentNumber < this.segmentsCount) {
+            this.segmentContentLength = Math.min(MAX_SEGMENT_CONTENT_LENGTH, this.contentLength - this.contentOffset);
+            if (this.state === SMRegion$1.SegmentHeader) {
+                this.handlingSegmentHeader();
+            }
+            if (this.state === SMRegion$1.SegmentContent) {
+                this.handlingSegmentContent(data);
+            }
+            if (this.state === SMRegion$1.SegmentFooter) {
+                this.handlingSegmentFooter();
+                this.contentOffset += this.segmentContentLength;
+            }
+            if (this.currentDataOffset === data.length) {
+                break;
+            }
+        }
+        if (this.state === SMRegion$1.StreamFooter) {
+            this.handlingMessageFooter();
+        }
+    };
+    handlingMessageHeader() {
+        this.messageHeaderBuffer[0] = MESSAGE_VERSION$1;
+        this.fillInt64(this.messageHeaderBuffer, 1, this.messageLength); // content length
+        this.fillInt16(this.messageHeaderBuffer, 9, 1);
+        this.fillInt16(this.messageHeaderBuffer, 11, this.segmentsCount);
+        this.pushData(this.messageHeaderBuffer);
+        this.state = SMRegion$1.SegmentHeader;
+    }
+    handlingSegmentHeader() {
+        const segmentHeaderBuffer = new Uint8Array(SEGMENT_HEADER_LENGTH$1);
+        this.fillInt16(segmentHeaderBuffer, 0, this.segmentNumber + 1);
+        this.fillInt64(segmentHeaderBuffer, 2, this.segmentContentLength);
+        this.segmentContentOffset = 0;
+        this.pushData(segmentHeaderBuffer);
+        this.state = SMRegion$1.SegmentContent;
+    }
+    handlingSegmentContent(data) {
+        const length = Math.min(this.segmentContentLength - this.segmentContentOffset, data.length - this.currentDataOffset);
+        if (length !== 0) {
+            const current_content = Uint8Array.prototype.slice.call(data, this.currentDataOffset, this.currentDataOffset + length);
+            this.messageCrc64.append(current_content, length);
+            this.segmentCrc64.append(current_content, length);
+            this.pushData(current_content);
+        }
+        this.segmentContentOffset += length;
+        this.currentDataOffset += length;
+        if (this.segmentContentOffset === this.segmentContentLength) {
+            this.state = SMRegion$1.SegmentFooter;
+        }
+    }
+    handlingSegmentFooter() {
+        const crc64Result = this.segmentCrc64.final(new Uint8Array([]), 0);
+        this.pushData(crc64Result);
+        this.segmentCrc64 = new StorageCRC64Calculator();
+        ++this.segmentNumber;
+        if (this.segmentNumber === this.segmentsCount) {
+            this.state = SMRegion$1.StreamFooter;
+        }
+        else {
+            this.state = SMRegion$1.SegmentHeader;
+        }
+    }
+    handlingMessageFooter() {
+        const crc64Result = this.messageCrc64.final(new Uint8Array([]), 0);
+        this.pushData(crc64Result);
+        signalStreamEnd(this.pushData);
+        this.state = SMRegion$1.Completed;
+    }
+    fillInt64(buffer, offset, input) {
+        if (buffer.length < offset + 8) {
+            throw new Error("Uint8Array length is not expected.");
+        }
+        const view = new DataView(buffer.buffer, buffer.byteOffset + offset, 8);
+        view.setBigUint64(0, BigInt(input), true);
+    }
+    fillInt16(buffer, offset, input) {
+        if (buffer.length < offset + 2) {
+            throw new Error("Uint8Array length is not expected.");
+        }
+        const view = new DataView(buffer.buffer, buffer.byteOffset + offset, 2);
+        view.setUint16(0, input, true);
+    }
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+function isNodeReadableStream(source) {
+    return (source !== null &&
+        source instanceof require$$0$3 &&
+        typeof source._read === "function" &&
+        typeof source._readableState === "object" &&
+        typeof source.pipe === "function");
+}
+/**
+ *
+ * To encode structured body for CRC64 content validtion in storage uploading.
+ * @param source -
+ * @param contentLength -
+ * @returns
+ */
+async function structuredMessageEncoding(source, contentLength) {
+    if (source === null) {
+        return {
+            body: source,
+            encodedContentLength: contentLength,
+        };
+    }
+    if (isNodeReadableStream(source)) {
+        const encodingMessage = new StructuredMessageEncodingStream(source, contentLength, {});
+        return {
+            body: encodingMessage,
+            encodedContentLength: encodingMessage.messageLength(),
+        };
+    }
+    if (typeof source === "function") {
+        const encodingMessage = new StructuredMessageEncodingStream(source(), contentLength, {});
+        return {
+            body: encodingMessage,
+            encodedContentLength: encodingMessage.messageLength(),
+        };
+    }
+    if (source instanceof Blob) {
+        const encoding = await BrowserStream(source, contentLength);
+        return {
+            body: encoding.content,
+            encodedContentLength: encoding.encodedContentLength,
+        };
+    }
+    if (typeof source === "string") {
+        const s = new Readable$1();
+        s._read = () => { };
+        s.push(source);
+        s.push(null);
+        const stringContentLength = Buffer.byteLength(source);
+        const encodingMessage = await new StructuredMessageEncodingStream(s, stringContentLength, {});
+        return {
+            body: encodingMessage,
+            encodedContentLength: encodingMessage.messageLength(),
+        };
+    }
+    if (source instanceof ArrayBuffer) {
+        const stream = Readable$1.from(Buffer.from(source));
+        const encodingMessage = await new StructuredMessageEncodingStream(stream, contentLength, {});
+        return {
+            body: encodingMessage,
+            encodedContentLength: encodingMessage.messageLength(),
+        };
+    }
+    if (source instanceof Buffer) {
+        const stream = Readable$1.from(source);
+        const encodingMessage = await new StructuredMessageEncodingStream(stream, contentLength, {});
+        return {
+            body: encodingMessage,
+            encodedContentLength: encodingMessage.messageLength(),
+        };
+    }
+    if (ArrayBuffer.isView(source)) {
+        const stream = Readable$1.from(Buffer.from(source.buffer, source.byteOffset, source.byteLength));
+        const encodingMessage = await new StructuredMessageEncodingStream(stream, contentLength, {});
+        return {
+            body: encodingMessage,
+            encodedContentLength: encodingMessage.messageLength(),
+        };
+    }
+    throw new Error("The specified request body type is not supported for CRC64 checksum");
+}
+async function pump(reader, controller, encodingStream) {
+    const { done, value } = await reader.read();
+    // When no more data needs to be consumed, close the stream
+    if (done) {
+        controller.close();
+        return;
+    }
+    // Enqueue the next data chunk into our target stream
+    encodingStream.sourceDataHandler(Buffer.from(value));
+}
+async function BrowserStream(source, contentLength) {
+    const sourceStream = source instanceof Blob ? source.stream() : source;
+    const reader = sourceStream.getReader();
+    let encodingStream = undefined;
+    const stream = new ReadableStream({
+        start(controller) {
+            encodingStream = new StructuredMessageEncoding((data) => {
+                controller.enqueue(data);
+            }, contentLength);
+        },
+        pull(controller) {
+            pump(reader, controller, encodingStream)
+                .then(() => {
+                return;
+            })
+                .catch(function (error) {
+                controller.error(error);
+            });
+        },
+    });
+    const response = new Response(stream);
+    return {
+        content: await response.blob(),
+        encodedContentLength: encodingStream.messageLength,
+    };
+}
+class StructuredMessageEncodingStream extends Readable$1 {
+    source;
+    encodingMethods;
+    constructor(source, contentLength, options) {
+        super({ highWaterMark: options.highWaterMark });
+        this.source = source;
+        this.encodingMethods = new StructuredMessageEncoding((dataToHandle) => {
+            if (!this.push(dataToHandle)) {
+                source.pause();
+            }
+        }, contentLength);
+        this.setSourceEventHandlers();
+    }
+    messageLength() {
+        return this.encodingMethods.messageLength;
+    }
+    setSourceEventHandlers() {
+        this.source.on("data", this.sourceDataHandler);
+        this.source.on("end", this.sourceErrorOrEndHandler);
+        this.source.on("error", this.sourceErrorOrEndHandler);
+        // needed for Node14
+        this.source.on("aborted", this.sourceAbortedHandler);
+    }
+    removeSourceEventHandlers() {
+        this.source.removeListener("data", this.sourceDataHandler);
+        this.source.removeListener("end", this.sourceErrorOrEndHandler);
+        this.source.removeListener("error", this.sourceErrorOrEndHandler);
+        this.source.removeListener("aborted", this.sourceAbortedHandler);
+    }
+    sourceDataHandler = (data) => {
+        this.encodingMethods.sourceDataHandler(data);
+    };
+    sourceAbortedHandler = () => {
+        const abortError = new AbortError("The operation was aborted.");
+        this.destroy(abortError);
+    };
+    sourceErrorOrEndHandler = (err) => {
+        if (err && err.name === "AbortError") {
+            this.destroy(err);
+            return;
+        }
+        // console.log(
+        //   `Source stream emits end or error, offset: ${
+        //     this.offset
+        //   }, dest end : ${this.end}`
+        // );
+        this.removeSourceEventHandlers();
+    };
+    _read() {
+        this.source.resume();
+    }
+    _destroy(error, callback) {
+        // remove listener from source and release source
+        this.removeSourceEventHandlers();
+        this.source.destroy();
+        callback(error === null ? undefined : error);
+    }
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+const MESSAGE_VERSION = 1;
+const MESSAGE_HEADER_LENGTH = 13;
+const SEGMENT_HEADER_LENGTH = 10;
+const FOOTER_LENGTH = 8;
+var SMRegion;
+(function (SMRegion) {
+    SMRegion[SMRegion["StreamHeader"] = 0] = "StreamHeader";
+    SMRegion[SMRegion["StreamFooter"] = 1] = "StreamFooter";
+    SMRegion[SMRegion["SegmentHeader"] = 2] = "SegmentHeader";
+    SMRegion[SMRegion["SegmentFooter"] = 3] = "SegmentFooter";
+    SMRegion[SMRegion["SegmentContent"] = 4] = "SegmentContent";
+})(SMRegion || (SMRegion = {}));
+class StructuredMessageDecoding {
+    pushData;
+    segmentsCount;
+    //   private currentState: SMRegion;
+    currentOffset;
+    currentDataOffset;
+    messageHeaderBuffer;
+    messageHeaderOffset;
+    segmentNumber;
+    segmentHeaderOffset;
+    segmentHeaderBuffer;
+    segmentContentOffset;
+    segmentContentLength;
+    segmentFooterOffset;
+    segmentFooterBuffer;
+    messageFooterOffset;
+    messageFooterBuffer;
+    segmentCrc64;
+    messageCrc64;
+    state;
+    constructor(pushData) {
+        this.pushData = pushData;
+        this.currentOffset = 0;
+        this.segmentsCount = 0;
+        this.messageHeaderOffset = 0;
+        this.messageHeaderBuffer = new Uint8Array(MESSAGE_HEADER_LENGTH);
+        this.currentDataOffset = 0;
+        this.segmentNumber = 0;
+        this.segmentHeaderOffset = 0;
+        this.segmentHeaderBuffer = new Uint8Array(SEGMENT_HEADER_LENGTH);
+        this.segmentContentOffset = 0;
+        this.segmentContentLength = 0;
+        this.state = SMRegion.StreamHeader;
+        this.segmentFooterOffset = 0;
+        this.segmentFooterBuffer = new Uint8Array(FOOTER_LENGTH);
+        this.messageFooterOffset = 0;
+        this.messageFooterBuffer = new Uint8Array(FOOTER_LENGTH);
+        this.segmentCrc64 = new StorageCRC64Calculator();
+        this.messageCrc64 = new StorageCRC64Calculator();
+    }
+    sourceDataHandler = (data) => {
+        this.currentDataOffset = 0;
+        if (this.state === SMRegion.StreamHeader) {
+            this.parseMessageHeader(data);
+        }
+        while (this.segmentNumber < this.segmentsCount && this.currentDataOffset < data.length) {
+            if (this.state === SMRegion.SegmentHeader) {
+                this.parseSegmentHeader(data);
+            }
+            if (this.state === SMRegion.SegmentContent) {
+                this.parseSegmentContent(data);
+            }
+            if (this.state === SMRegion.SegmentFooter) {
+                this.parseSegmentFooter(data);
+            }
+        }
+        if (this.state === SMRegion.StreamFooter) {
+            this.parseMessageFooter(data);
+        }
+    };
+    parseMessageHeader(data) {
+        const length = Math.min(MESSAGE_HEADER_LENGTH - this.messageHeaderOffset, data.length - this.currentDataOffset);
+        this.messageHeaderBuffer.set(Uint8Array.prototype.slice.call(data, this.currentDataOffset, this.currentDataOffset + length), this.messageHeaderOffset);
+        this.currentDataOffset += length;
+        this.messageHeaderOffset += length;
+        this.currentOffset += length;
+        if (this.messageHeaderOffset === MESSAGE_HEADER_LENGTH) {
+            const currentVersion = this.messageHeaderBuffer[0];
+            if (currentVersion !== MESSAGE_VERSION) {
+                throw new Error("Unexpected message version");
+            }
+            this.segmentsCount = this.toInt16(Uint8Array.prototype.slice.call(this.messageHeaderBuffer, 11, 13));
+            this.state = SMRegion.SegmentHeader;
+        }
+    }
+    parseSegmentHeader(data) {
+        const length = Math.min(SEGMENT_HEADER_LENGTH - this.segmentHeaderOffset, data.length - this.currentDataOffset);
+        this.segmentHeaderBuffer.set(Uint8Array.prototype.slice.call(data, this.currentDataOffset, this.currentDataOffset + length), this.segmentHeaderOffset);
+        this.currentDataOffset += length;
+        this.segmentHeaderOffset += length;
+        this.currentOffset += length;
+        if (this.segmentHeaderOffset === SEGMENT_HEADER_LENGTH) {
+            const currentSegmentNumber = this.toInt16(Uint8Array.prototype.slice.call(this.segmentHeaderBuffer, 0, 2));
+            if (currentSegmentNumber !== this.segmentNumber + 1) {
+                throw new Error("Segment number is unexpected.");
+            }
+            this.segmentContentLength = this.toInt64(this.segmentHeaderBuffer, 2);
+            this.segmentContentOffset = 0;
+            this.state = SMRegion.SegmentContent;
+        }
+    }
+    parseSegmentContent(data) {
+        const length = Math.min(this.segmentContentLength - this.segmentContentOffset, data.length - this.currentDataOffset);
+        const dataToHandle = Uint8Array.prototype.slice.call(data, this.currentDataOffset, this.currentDataOffset + length);
+        this.segmentCrc64.append(dataToHandle, length);
+        this.messageCrc64.append(dataToHandle, length);
+        this.pushData(dataToHandle);
+        this.currentDataOffset += length;
+        this.segmentContentOffset += length;
+        this.currentOffset += length;
+        if (this.segmentContentOffset === this.segmentContentLength) {
+            this.state = SMRegion.SegmentFooter;
+        }
+    }
+    parseSegmentFooter(data) {
+        const length = Math.min(FOOTER_LENGTH - this.segmentFooterOffset, data.length - this.currentDataOffset);
+        this.segmentFooterBuffer.set(Uint8Array.prototype.slice.call(data, this.currentDataOffset, this.currentDataOffset + length), this.segmentFooterOffset);
+        this.currentDataOffset += length;
+        this.segmentFooterOffset += length;
+        this.currentOffset += length;
+        if (this.segmentFooterOffset === FOOTER_LENGTH) {
+            const crc64Result = this.segmentCrc64.final(new Uint8Array([]), 0);
+            if (!this.checkCrc64CheckSum(crc64Result, this.segmentFooterBuffer)) {
+                throw new Error(`Segment check sum mismatch, segmentNumber: ${this.segmentNumber}`);
+            }
+            ++this.segmentNumber;
+            if (this.segmentNumber === this.segmentsCount) {
+                this.state = SMRegion.StreamFooter;
+            }
+            else {
+                this.segmentHeaderOffset = 0;
+                this.segmentFooterOffset = 0;
+                this.segmentCrc64 = new StorageCRC64Calculator();
+                this.state = SMRegion.SegmentHeader;
+            }
+        }
+    }
+    parseMessageFooter(data) {
+        const length = Math.min(FOOTER_LENGTH - this.messageFooterOffset, data.length - this.currentDataOffset);
+        this.messageFooterBuffer.set(Uint8Array.prototype.slice.call(data, this.currentDataOffset, this.currentDataOffset + length), this.messageFooterOffset);
+        this.currentDataOffset += length;
+        this.messageFooterOffset += length;
+        this.currentOffset += length;
+        if (this.messageFooterOffset === FOOTER_LENGTH) {
+            const crc64Result = this.messageCrc64.final(new Uint8Array([]), 0);
+            if (!this.checkCrc64CheckSum(crc64Result, this.messageFooterBuffer)) {
+                throw new Error("Check sum mismatch");
+            }
+            this.pushData(null);
+        }
+    }
+    toInt64(input, offset) {
+        if (input.length < offset + 8) {
+            throw new Error("CRC64 buffer error, something wrong with crc64 calculator");
+        }
+        const view = new DataView(input.buffer, input.byteOffset + offset, 8);
+        return Number(view.getBigUint64(0, true));
+    }
+    toInt16(input) {
+        if (input.length !== 2) {
+            throw new Error("CRC64 buffer error, something wrong with crc64 calculator");
+        }
+        return input[0] + input[1] * 256;
+    }
+    checkCrc64CheckSum(first, second) {
+        if (first.length !== 8 || second.length !== 8) {
+            throw new Error("CRC64 buffer error, something wrong with crc64 calculator");
+        }
+        for (let index = 0; index < 8; ++index) {
+            if (first[index] !== second[index]) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * To decode structured body for CRC64 content validtion in storage downloading.
+ * @param source -
+ * @param options -
+ * @returns
+ */
+function structuredMessageDecodingStream(source, options) {
+    return new StructuredMessageDecodingStream(source, options);
+}
+class StructuredMessageDecodingStream extends Readable$1 {
+    source;
+    decodingMethods;
+    constructor(source, options) {
+        super({ highWaterMark: options.highWaterMark });
+        this.source = source;
+        this.decodingMethods = new StructuredMessageDecoding((dataToHandle) => {
+            if (!this.push(dataToHandle)) {
+                source.pause();
+            }
+        });
+        this.setSourceEventHandlers();
+    }
+    _read() {
+        this.source.resume();
+    }
+    setSourceEventHandlers() {
+        this.source.on("data", this.sourceDataHandler);
+        this.source.on("end", this.sourceErrorOrEndHandler);
+        this.source.on("error", this.sourceErrorOrEndHandler);
+        // needed for Node14
+        this.source.on("aborted", this.sourceAbortedHandler);
+    }
+    removeSourceEventHandlers() {
+        this.source.removeListener("data", this.sourceDataHandler);
+        this.source.removeListener("end", this.sourceErrorOrEndHandler);
+        this.source.removeListener("error", this.sourceErrorOrEndHandler);
+        this.source.removeListener("aborted", this.sourceAbortedHandler);
+    }
+    sourceDataHandler = (data) => {
+        try {
+            this.decodingMethods.sourceDataHandler(data);
+        }
+        catch (err) {
+            this.destroy(err);
+        }
+    };
+    sourceAbortedHandler = () => {
+        const abortError = new AbortError("The operation was aborted.");
+        this.destroy(abortError);
+    };
+    sourceErrorOrEndHandler = (err) => {
+        if (err) {
+            this.destroy(err);
+            return;
+        }
+        this.removeSourceEventHandlers();
+    };
+    _destroy(error, callback) {
+        // remove listener from source and release source
+        this.removeSourceEventHandlers();
+        this.source.destroy();
+        callback(error === null ? undefined : error);
+    }
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 let _defaultHttpClient;
 function getCachedDefaultHttpClient() {
     if (!_defaultHttpClient) {
@@ -46378,9 +54867,146 @@ class BaseRequestPolicy {
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+/**
+ * StorageBrowserPolicy will handle differences between Node.js and browser runtime, including:
+ *
+ * 1. Browsers cache GET/HEAD requests by adding conditional headers such as 'IF_MODIFIED_SINCE'.
+ * StorageBrowserPolicy is a policy used to add a timestamp query to GET/HEAD request URL
+ * thus avoid the browser cache.
+ *
+ * 2. Remove cookie header for security
+ *
+ * 3. Remove content-length header to avoid browsers warning
+ *
+ * In Node.js, this policy is a no-op pass-through.
+ */
+class StorageBrowserPolicy extends BaseRequestPolicy {
+    /**
+     * Creates an instance of StorageBrowserPolicy.
+     * @param nextPolicy -
+     * @param options -
+     */
+    // The base class has a protected constructor. Adding a public one to enable constructing of this class.
+    /* eslint-disable-next-line @typescript-eslint/no-useless-constructor*/
+    constructor(nextPolicy, options) {
+        super(nextPolicy, options);
+    }
+    /**
+     * Sends out request.
+     *
+     * @param request -
+     */
+    async sendRequest(request) {
+        return this._nextPolicy.sendRequest(request);
+    }
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * StorageBrowserPolicyFactory is a factory class helping generating StorageBrowserPolicy objects.
+ */
+class StorageBrowserPolicyFactory {
+    /**
+     * Creates a StorageBrowserPolicyFactory object.
+     *
+     * @param nextPolicy -
+     * @param options -
+     */
+    create(nextPolicy, options) {
+        return new StorageBrowserPolicy(nextPolicy, options);
+    }
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * Credential policy used to sign HTTP(S) requests before sending. This is an
+ * abstract class.
+ */
+class CredentialPolicy extends BaseRequestPolicy {
+    /**
+     * Sends out request.
+     *
+     * @param request -
+     */
+    sendRequest(request) {
+        return this._nextPolicy.sendRequest(this.signRequest(request));
+    }
+    /**
+     * Child classes must implement this method with request signing. This method
+     * will be executed in {@link sendRequest}.
+     *
+     * @param request -
+     */
+    signRequest(request) {
+        // Child classes must override this method with request signing. This method
+        // will be executed in sendRequest().
+        return request;
+    }
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * AnonymousCredentialPolicy is used with HTTP(S) requests that read public resources
+ * or for use with Shared Access Signatures (SAS).
+ */
+class AnonymousCredentialPolicy extends CredentialPolicy {
+    /**
+     * Creates an instance of AnonymousCredentialPolicy.
+     * @param nextPolicy -
+     * @param options -
+     */
+    // The base class has a protected constructor. Adding a public one to enable constructing of this class.
+    /* eslint-disable-next-line @typescript-eslint/no-useless-constructor*/
+    constructor(nextPolicy, options) {
+        super(nextPolicy, options);
+    }
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * Credential is an abstract class for Azure Storage HTTP requests signing. This
+ * class will host an credentialPolicyCreator factory which generates CredentialPolicy.
+ */
+class Credential {
+    /**
+     * Creates a RequestPolicy object.
+     *
+     * @param _nextPolicy -
+     * @param _options -
+     */
+    create(_nextPolicy, _options) {
+        throw new Error("Method should be implemented in children classes.");
+    }
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+/**
+ * AnonymousCredential provides a credentialPolicyCreator member used to create
+ * AnonymousCredentialPolicy objects. AnonymousCredentialPolicy is used with
+ * HTTP(S) requests that read public resources or for use with Shared Access
+ * Signatures (SAS).
+ */
+class AnonymousCredential extends Credential {
+    /**
+     * Creates an {@link AnonymousCredentialPolicy} object.
+     *
+     * @param nextPolicy -
+     * @param options -
+     */
+    create(nextPolicy, options) {
+        return new AnonymousCredentialPolicy(nextPolicy, options);
+    }
+}
+
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 const URLConstants$1 = {
     Parameters: {
-        FORCE_BROWSER_NO_CACHE: "_",
         TIMEOUT: "timeout",
     },
 };
@@ -46391,7 +55017,6 @@ const HeaderConstants = {
     CONTENT_LENGTH: "Content-Length",
     CONTENT_MD5: "Content-Md5",
     CONTENT_TYPE: "Content-Type",
-    COOKIE: "Cookie",
     DATE: "date",
     IF_MATCH: "if-match",
     IF_MODIFIED_SINCE: "if-modified-since",
@@ -46516,151 +55141,6 @@ async function delay(timeInMs, aborter, abortError) {
             aborter.addEventListener("abort", abortHandler);
         }
     });
-}
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-/**
- * StorageBrowserPolicy will handle differences between Node.js and browser runtime, including:
- *
- * 1. Browsers cache GET/HEAD requests by adding conditional headers such as 'IF_MODIFIED_SINCE'.
- * StorageBrowserPolicy is a policy used to add a timestamp query to GET/HEAD request URL
- * thus avoid the browser cache.
- *
- * 2. Remove cookie header for security
- *
- * 3. Remove content-length header to avoid browsers warning
- */
-class StorageBrowserPolicy extends BaseRequestPolicy {
-    /**
-     * Creates an instance of StorageBrowserPolicy.
-     * @param nextPolicy -
-     * @param options -
-     */
-    // The base class has a protected constructor. Adding a public one to enable constructing of this class.
-    /* eslint-disable-next-line @typescript-eslint/no-useless-constructor*/
-    constructor(nextPolicy, options) {
-        super(nextPolicy, options);
-    }
-    /**
-     * Sends out request.
-     *
-     * @param request -
-     */
-    async sendRequest(request) {
-        if (isNodeLike) {
-            return this._nextPolicy.sendRequest(request);
-        }
-        if (request.method.toUpperCase() === "GET" || request.method.toUpperCase() === "HEAD") {
-            request.url = setURLParameter$1(request.url, URLConstants$1.Parameters.FORCE_BROWSER_NO_CACHE, new Date().getTime().toString());
-        }
-        request.headers.remove(HeaderConstants.COOKIE);
-        // According to XHR standards, content-length should be fully controlled by browsers
-        request.headers.remove(HeaderConstants.CONTENT_LENGTH);
-        return this._nextPolicy.sendRequest(request);
-    }
-}
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-/**
- * StorageBrowserPolicyFactory is a factory class helping generating StorageBrowserPolicy objects.
- */
-class StorageBrowserPolicyFactory {
-    /**
-     * Creates a StorageBrowserPolicyFactory object.
-     *
-     * @param nextPolicy -
-     * @param options -
-     */
-    create(nextPolicy, options) {
-        return new StorageBrowserPolicy(nextPolicy, options);
-    }
-}
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-/**
- * Credential policy used to sign HTTP(S) requests before sending. This is an
- * abstract class.
- */
-class CredentialPolicy extends BaseRequestPolicy {
-    /**
-     * Sends out request.
-     *
-     * @param request -
-     */
-    sendRequest(request) {
-        return this._nextPolicy.sendRequest(this.signRequest(request));
-    }
-    /**
-     * Child classes must implement this method with request signing. This method
-     * will be executed in {@link sendRequest}.
-     *
-     * @param request -
-     */
-    signRequest(request) {
-        // Child classes must override this method with request signing. This method
-        // will be executed in sendRequest().
-        return request;
-    }
-}
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-/**
- * AnonymousCredentialPolicy is used with HTTP(S) requests that read public resources
- * or for use with Shared Access Signatures (SAS).
- */
-class AnonymousCredentialPolicy extends CredentialPolicy {
-    /**
-     * Creates an instance of AnonymousCredentialPolicy.
-     * @param nextPolicy -
-     * @param options -
-     */
-    // The base class has a protected constructor. Adding a public one to enable constructing of this class.
-    /* eslint-disable-next-line @typescript-eslint/no-useless-constructor*/
-    constructor(nextPolicy, options) {
-        super(nextPolicy, options);
-    }
-}
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-/**
- * Credential is an abstract class for Azure Storage HTTP requests signing. This
- * class will host an credentialPolicyCreator factory which generates CredentialPolicy.
- */
-class Credential {
-    /**
-     * Creates a RequestPolicy object.
-     *
-     * @param _nextPolicy -
-     * @param _options -
-     */
-    create(_nextPolicy, _options) {
-        throw new Error("Method should be implemented in children classes.");
-    }
-}
-
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-/**
- * AnonymousCredential provides a credentialPolicyCreator member used to create
- * AnonymousCredentialPolicy objects. AnonymousCredentialPolicy is used with
- * HTTP(S) requests that read public resources or for use with Shared Access
- * Signatures (SAS).
- */
-class AnonymousCredential extends Credential {
-    /**
-     * Creates an {@link AnonymousCredentialPolicy} object.
-     *
-     * @param nextPolicy -
-     * @param options -
-     */
-    create(nextPolicy, options) {
-        return new AnonymousCredentialPolicy(nextPolicy, options);
-    }
 }
 
 // Copyright (c) Microsoft Corporation.
@@ -47181,20 +55661,13 @@ const storageBrowserPolicyName = "storageBrowserPolicy";
 /**
  * storageBrowserPolicy is a policy used to prevent browsers from caching requests
  * and to remove cookies and explicit content-length headers.
+ *
+ * In Node.js, this policy is a no-op pass-through.
  */
 function storageBrowserPolicy() {
     return {
         name: storageBrowserPolicyName,
         async sendRequest(request, next) {
-            if (isNodeLike) {
-                return next(request);
-            }
-            if (request.method === "GET" || request.method === "HEAD") {
-                request.url = setURLParameter$1(request.url, URLConstants$1.Parameters.FORCE_BROWSER_NO_CACHE, new Date().getTime().toString());
-            }
-            request.headers.delete(HeaderConstants.COOKIE);
-            // According to XHR standards, content-length should be fully controlled by browsers
-            request.headers.delete(HeaderConstants.CONTENT_LENGTH);
             return next(request);
         },
     };
@@ -47582,15 +56055,14 @@ class UserDelegationKeyCredential {
      * @param stringToSign -
      */
     computeHMACSHA256(stringToSign) {
-        // console.log(`stringToSign: ${JSON.stringify(stringToSign)}`);
         return createHmac("sha256", this.key).update(stringToSign, "utf8").digest("base64");
     }
 }
 
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-const SDK_VERSION = "12.31.0";
-const SERVICE_VERSION = "2026-02-06";
+const SDK_VERSION = "12.32.0";
+const SERVICE_VERSION = "2026-04-06";
 const BLOCK_BLOB_MAX_UPLOAD_BLOB_BYTES = 256 * 1024 * 1024; // 256MB
 const BLOCK_BLOB_MAX_STAGE_BLOCK_BYTES = 4000 * 1024 * 1024; // 4000MB
 const BLOCK_BLOB_MAX_BLOCKS = 50000;
@@ -48189,8 +56661,8 @@ var KnownStorageErrorCode;
     KnownStorageErrorCode["FeatureVersionMismatch"] = "FeatureVersionMismatch";
     /** IncrementalCopyBlobMismatch */
     KnownStorageErrorCode["IncrementalCopyBlobMismatch"] = "IncrementalCopyBlobMismatch";
-    /** IncrementalCopyOfEarlierVersionSnapshotNotAllowed */
-    KnownStorageErrorCode["IncrementalCopyOfEarlierVersionSnapshotNotAllowed"] = "IncrementalCopyOfEarlierVersionSnapshotNotAllowed";
+    /** IncrementalCopyOfEarlierSnapshotNotAllowed */
+    KnownStorageErrorCode["IncrementalCopyOfEarlierSnapshotNotAllowed"] = "IncrementalCopyOfEarlierSnapshotNotAllowed";
     /** IncrementalCopySourceMustBeSnapshot */
     KnownStorageErrorCode["IncrementalCopySourceMustBeSnapshot"] = "IncrementalCopySourceMustBeSnapshot";
     /** InfiniteLeaseDurationRequired */
@@ -48919,6 +57391,13 @@ const KeyInfo = {
                     name: "String",
                 },
             },
+            delegatedUserTid: {
+                serializedName: "DelegatedUserTid",
+                xmlName: "DelegatedUserTid",
+                type: {
+                    name: "String",
+                },
+            },
         },
     },
 };
@@ -48972,6 +57451,13 @@ const UserDelegationKey = {
                 serializedName: "SignedVersion",
                 required: true,
                 xmlName: "SignedVersion",
+                type: {
+                    name: "String",
+                },
+            },
+            signedDelegatedUserTenantId: {
+                serializedName: "SignedDelegatedUserTid",
+                xmlName: "SignedDelegatedUserTid",
                 type: {
                     name: "String",
                 },
@@ -50603,6 +59089,9 @@ const ServiceGetAccountInfoHeaders = {
                         "Standard_RAGRS",
                         "Standard_ZRS",
                         "Premium_LRS",
+                        "Standard_GZRS",
+                        "Premium_ZRS",
+                        "Standard_RAGZRS",
                     ],
                 },
             },
@@ -52054,6 +60543,9 @@ const ContainerGetAccountInfoHeaders = {
                         "Standard_RAGRS",
                         "Standard_ZRS",
                         "Premium_LRS",
+                        "Standard_GZRS",
+                        "Premium_ZRS",
+                        "Standard_RAGZRS",
                     ],
                 },
             },
@@ -52418,6 +60910,20 @@ const BlobDownloadHeaders = {
                 xmlName: "x-ms-legal-hold",
                 type: {
                     name: "Boolean",
+                },
+            },
+            structuredBodyType: {
+                serializedName: "x-ms-structured-body",
+                xmlName: "x-ms-structured-body",
+                type: {
+                    name: "String",
+                },
+            },
+            structuredContentLength: {
+                serializedName: "x-ms-structured-content-length",
+                xmlName: "x-ms-structured-content-length",
+                type: {
+                    name: "Number",
                 },
             },
             errorCode: {
@@ -54253,6 +62759,9 @@ const BlobGetAccountInfoHeaders = {
                         "Standard_RAGRS",
                         "Standard_ZRS",
                         "Premium_LRS",
+                        "Standard_GZRS",
+                        "Premium_ZRS",
+                        "Standard_RAGZRS",
                     ],
                 },
             },
@@ -54887,6 +63396,13 @@ const PageBlobUploadPagesHeaders = {
             encryptionScope: {
                 serializedName: "x-ms-encryption-scope",
                 xmlName: "x-ms-encryption-scope",
+                type: {
+                    name: "String",
+                },
+            },
+            structuredBodyType: {
+                serializedName: "x-ms-structured-body",
+                xmlName: "x-ms-structured-body",
                 type: {
                     name: "String",
                 },
@@ -55754,6 +64270,13 @@ const AppendBlobAppendBlockHeaders = {
                     name: "String",
                 },
             },
+            structuredBodyType: {
+                serializedName: "x-ms-structured-body",
+                xmlName: "x-ms-structured-body",
+                type: {
+                    name: "String",
+                },
+            },
             errorCode: {
                 serializedName: "x-ms-error-code",
                 xmlName: "x-ms-error-code",
@@ -56067,6 +64590,13 @@ const BlockBlobUploadHeaders = {
                     name: "String",
                 },
             },
+            structuredBodyType: {
+                serializedName: "x-ms-structured-body",
+                xmlName: "x-ms-structured-body",
+                type: {
+                    name: "String",
+                },
+            },
             errorCode: {
                 serializedName: "x-ms-error-code",
                 xmlName: "x-ms-error-code",
@@ -56281,6 +64811,13 @@ const BlockBlobStageBlockHeaders = {
             encryptionScope: {
                 serializedName: "x-ms-encryption-scope",
                 xmlName: "x-ms-encryption-scope",
+                type: {
+                    name: "String",
+                },
+            },
+            structuredBodyType: {
+                serializedName: "x-ms-structured-body",
+                xmlName: "x-ms-structured-body",
                 type: {
                     name: "String",
                 },
@@ -56891,7 +65428,7 @@ const timeoutInSeconds = {
 const version$1 = {
     parameterPath: "version",
     mapper: {
-        defaultValue: "2026-02-06",
+        defaultValue: "2026-04-06",
         isConstant: true,
         serializedName: "x-ms-version",
         type: {
@@ -57497,6 +66034,16 @@ const rangeGetContentCRC64 = {
         },
     },
 };
+const structuredBodyType = {
+    parameterPath: ["options", "structuredBodyType"],
+    mapper: {
+        serializedName: "x-ms-structured-body",
+        xmlName: "x-ms-structured-body",
+        type: {
+            name: "String",
+        },
+    },
+};
 const encryptionKey = {
     parameterPath: ["options", "cpkInfo", "encryptionKey"],
     mapper: {
@@ -57575,6 +66122,26 @@ const blobDeleteType = {
         xmlName: "deletetype",
         type: {
             name: "String",
+        },
+    },
+};
+const accessTierIfModifiedSince = {
+    parameterPath: ["options", "accessTierIfModifiedSince"],
+    mapper: {
+        serializedName: "x-ms-access-tier-if-modified-since",
+        xmlName: "x-ms-access-tier-if-modified-since",
+        type: {
+            name: "DateTimeRfc1123",
+        },
+    },
+};
+const accessTierIfUnmodifiedSince = {
+    parameterPath: ["options", "accessTierIfUnmodifiedSince"],
+    mapper: {
+        serializedName: "x-ms-access-tier-if-unmodified-since",
+        xmlName: "x-ms-access-tier-if-unmodified-since",
+        type: {
+            name: "DateTimeRfc1123",
         },
     },
 };
@@ -58234,6 +66801,16 @@ const ifSequenceNumberEqualTo = {
         },
     },
 };
+const structuredContentLength = {
+    parameterPath: ["options", "structuredContentLength"],
+    mapper: {
+        serializedName: "x-ms-structured-content-length",
+        xmlName: "x-ms-structured-content-length",
+        type: {
+            name: "Number",
+        },
+    },
+};
 const pageWrite1 = {
     parameterPath: "pageWrite",
     mapper: {
@@ -58283,6 +66860,36 @@ const range1 = {
         serializedName: "x-ms-range",
         required: true,
         xmlName: "x-ms-range",
+        type: {
+            name: "String",
+        },
+    },
+};
+const sourceEncryptionKey = {
+    parameterPath: ["options", "sourceCpkInfo", "sourceEncryptionKey"],
+    mapper: {
+        serializedName: "x-ms-source-encryption-key",
+        xmlName: "x-ms-source-encryption-key",
+        type: {
+            name: "String",
+        },
+    },
+};
+const sourceEncryptionKeySha256 = {
+    parameterPath: ["options", "sourceCpkInfo", "sourceEncryptionKeySha256"],
+    mapper: {
+        serializedName: "x-ms-source-encryption-key-sha256",
+        xmlName: "x-ms-source-encryption-key-sha256",
+        type: {
+            name: "String",
+        },
+    },
+};
+const sourceEncryptionAlgorithm = {
+    parameterPath: ["options", "sourceCpkInfo", "sourceEncryptionAlgorithm"],
+    mapper: {
+        serializedName: "x-ms-source-encryption-algorithm",
+        xmlName: "x-ms-source-encryption-algorithm",
         type: {
             name: "String",
         },
@@ -59787,6 +68394,7 @@ const downloadOperationSpec = {
         range,
         rangeGetContentMD5,
         rangeGetContentCRC64,
+        structuredBodyType,
         encryptionKey,
         encryptionKeySha256,
         encryptionAlgorithm,
@@ -59862,6 +68470,8 @@ const deleteOperationSpec = {
         ifNoneMatch,
         ifTags,
         deleteSnapshots,
+        accessTierIfModifiedSince,
+        accessTierIfUnmodifiedSince,
     ],
     isXML: true,
     serializer: xmlSerializer$3,
@@ -60724,6 +69334,7 @@ const uploadPagesOperationSpec = {
         ifModifiedSince,
         ifUnmodifiedSince,
         range,
+        structuredBodyType,
         encryptionKey,
         encryptionKeySha256,
         encryptionAlgorithm,
@@ -60739,6 +69350,7 @@ const uploadPagesOperationSpec = {
         ifSequenceNumberLessThanOrEqualTo,
         ifSequenceNumberLessThan,
         ifSequenceNumberEqualTo,
+        structuredContentLength,
     ],
     isXML: true,
     contentType: "application/xml; charset=utf-8",
@@ -60827,6 +69439,9 @@ const uploadPagesFromURLOperationSpec = {
         sourceRange,
         sourceContentCrc64,
         range1,
+        sourceEncryptionKey,
+        sourceEncryptionKeySha256,
+        sourceEncryptionAlgorithm,
     ],
     isXML: true,
     serializer: xmlSerializer$2,
@@ -61123,6 +69738,7 @@ const appendBlockOperationSpec = {
         leaseId,
         ifModifiedSince,
         ifUnmodifiedSince,
+        structuredBodyType,
         encryptionKey,
         encryptionKeySha256,
         encryptionAlgorithm,
@@ -61134,6 +69750,7 @@ const appendBlockOperationSpec = {
         transactionalContentCrc64,
         contentType1,
         accept2,
+        structuredContentLength,
         maxSize,
         appendPosition,
     ],
@@ -61181,6 +69798,9 @@ const appendBlockFromUrlOperationSpec = {
         transactionalContentMD5,
         sourceUrl,
         sourceContentCrc64,
+        sourceEncryptionKey,
+        sourceEncryptionKeySha256,
+        sourceEncryptionAlgorithm,
         maxSize,
         appendPosition,
         sourceRange1,
@@ -61337,6 +69957,7 @@ const uploadOperationSpec = {
         leaseId,
         ifModifiedSince,
         ifUnmodifiedSince,
+        structuredBodyType,
         encryptionKey,
         encryptionKeySha256,
         encryptionAlgorithm,
@@ -61359,6 +69980,7 @@ const uploadOperationSpec = {
         transactionalContentCrc64,
         contentType1,
         accept2,
+        structuredContentLength,
         blobType2,
     ],
     isXML: true,
@@ -61415,6 +70037,9 @@ const putBlobFromUrlOperationSpec = {
         copySourceTags,
         fileRequestIntent,
         transactionalContentMD5,
+        sourceEncryptionKey,
+        sourceEncryptionKeySha256,
+        sourceEncryptionAlgorithm,
         blobType2,
         copySourceBlobProperties,
     ],
@@ -61445,6 +70070,7 @@ const stageBlockOperationSpec = {
         requestId,
         contentLength,
         leaseId,
+        structuredBodyType,
         encryptionKey,
         encryptionKeySha256,
         encryptionAlgorithm,
@@ -61453,6 +70079,7 @@ const stageBlockOperationSpec = {
         transactionalContentCrc64,
         contentType1,
         accept2,
+        structuredContentLength,
     ],
     isXML: true,
     contentType: "application/xml; charset=utf-8",
@@ -61496,6 +70123,9 @@ const stageBlockFromURLOperationSpec = {
         fileRequestIntent,
         sourceUrl,
         sourceContentCrc64,
+        sourceEncryptionKey,
+        sourceEncryptionKeySha256,
+        sourceEncryptionAlgorithm,
         sourceRange1,
     ],
     isXML: true,
@@ -61609,7 +70239,7 @@ let StorageClient$1 = class StorageClient extends ExtendedServiceClient {
         const defaults = {
             requestContentType: "application/json; charset=utf-8",
         };
-        const packageDetails = `azsdk-js-azure-storage-blob/12.30.0`;
+        const packageDetails = `azsdk-js-azure-storage-blob/12.32.0`;
         const userAgentPrefix = options.userAgentOptions && options.userAgentOptions.userAgentPrefix
             ? `${options.userAgentOptions.userAgentPrefix} ${packageDetails}`
             : `${packageDetails}`;
@@ -61625,7 +70255,7 @@ let StorageClient$1 = class StorageClient extends ExtendedServiceClient {
         // Parameter assignments
         this.url = url;
         // Assigning values to Constant parameters
-        this.version = options.version || "2026-02-06";
+        this.version = options.version || "2026-04-06";
         this.service = new ServiceImpl(this);
         this.container = new ContainerImpl(this);
         this.blob = new BlobImpl(this);
@@ -61941,7 +70571,7 @@ function truncatedISO8061Date(date, withMilliseconds = true) {
  * @param content -
  */
 function base64encode$1(content) {
-    return !isNodeLike ? btoa(content) : Buffer.from(content).toString("base64");
+    return Buffer.from(content).toString("base64");
 }
 /**
  * Generate a 64 bytes base64 block ID string.
@@ -62228,6 +70858,31 @@ function assertResponse(response) {
         return response;
     }
     throw new TypeError(`Unexpected response object ${response}`);
+}
+async function setUploadChecksumParameters(body, contentLength, parameters, uploadOptions, configContentChecksumAlgorithm) {
+    let contentChecksumAlgorithm = uploadOptions.contentChecksumAlgorithm ?? configContentChecksumAlgorithm;
+    if (contentChecksumAlgorithm === undefined) {
+        contentChecksumAlgorithm = "Customized";
+    }
+    if (contentChecksumAlgorithm === "Auto") {
+        contentChecksumAlgorithm = "StorageCrc64";
+    }
+    let bodyInfo = undefined;
+    if (contentChecksumAlgorithm === "Customized") {
+        parameters.transactionalContentMD5 = uploadOptions.transactionalContentMD5;
+        parameters.transactionalContentCrc64 = uploadOptions.transactionalContentCrc64;
+    }
+    else if (contentChecksumAlgorithm === "StorageCrc64") {
+        await StorageCRC64Calculator.init();
+        bodyInfo = await structuredMessageEncoding(body, contentLength);
+        parameters.structuredBodyType = "XSM/1.0; properties=crc64";
+        parameters.structuredContentLength = contentLength;
+    }
+    return {
+        body: contentChecksumAlgorithm === "StorageCrc64" ? bodyInfo.body : body,
+        contentLength: contentChecksumAlgorithm === "StorageCrc64" ? bodyInfo.encodedContentLength : contentLength,
+        contentChecksumAlgorithm: contentChecksumAlgorithm,
+    };
 }
 
 // Copyright (c) Microsoft Corporation.
@@ -62854,6 +71509,11 @@ class SASQueryParameters {
      */
     signedVersion;
     /**
+     * The delegated user tenant id in Azure AD.
+     * Property of user delegation key.
+     */
+    signedDelegatedUserTid;
+    /**
      * Authorized AAD Object ID in GUID format. The AAD Object ID of a user authorized by the owner of the User Delegation Key
      * to perform the action granted by the SAS. The Azure Storage service will ensure that the owner of the user delegation key
      * has the required permissions before granting access but no additional permission check for the user specified in
@@ -62865,6 +71525,14 @@ class SASQueryParameters {
      * This is only used for User Delegation SAS.
      */
     correlationId;
+    /**
+     * Keys for request headers required in the SAS token
+     */
+    requestHeaderKeys;
+    /**
+     * Keys for request query parameters required in the SAS token
+     */
+    requestQueryParameterKeys;
     /**
      * Optional. IP range allowed for this SAS.
      *
@@ -62879,7 +71547,7 @@ class SASQueryParameters {
         }
         return undefined;
     }
-    constructor(version, signature, permissionsOrOptions, services, resourceTypes, protocol, startsOn, expiresOn, ipRange, identifier, resource, cacheControl, contentDisposition, contentEncoding, contentLanguage, contentType, userDelegationKey, preauthorizedAgentObjectId, correlationId, encryptionScope, delegatedUserObjectId) {
+    constructor(version, signature, permissionsOrOptions, services, resourceTypes, protocol, startsOn, expiresOn, ipRange, identifier, resource, cacheControl, contentDisposition, contentEncoding, contentLanguage, contentType, userDelegationKey, preauthorizedAgentObjectId, correlationId, encryptionScope, delegatedUserObjectId, requestHeaderKeys, requestQueryParameterKeys) {
         this.version = version;
         this.signature = signature;
         if (permissionsOrOptions !== undefined && typeof permissionsOrOptions !== "string") {
@@ -62900,6 +71568,8 @@ class SASQueryParameters {
             this.contentEncoding = permissionsOrOptions.contentEncoding;
             this.contentLanguage = permissionsOrOptions.contentLanguage;
             this.contentType = permissionsOrOptions.contentType;
+            this.requestHeaderKeys = permissionsOrOptions.requestHeaderKeys;
+            this.requestQueryParameterKeys = permissionsOrOptions.requestQueryParameterKeys;
             if (permissionsOrOptions.userDelegationKey) {
                 this.signedOid = permissionsOrOptions.userDelegationKey.signedObjectId;
                 this.signedTenantId = permissionsOrOptions.userDelegationKey.signedTenantId;
@@ -62907,6 +71577,8 @@ class SASQueryParameters {
                 this.signedExpiresOn = permissionsOrOptions.userDelegationKey.signedExpiresOn;
                 this.signedService = permissionsOrOptions.userDelegationKey.signedService;
                 this.signedVersion = permissionsOrOptions.userDelegationKey.signedVersion;
+                this.signedDelegatedUserTid =
+                    permissionsOrOptions.userDelegationKey.signedDelegatedUserTenantId;
                 this.preauthorizedAgentObjectId = permissionsOrOptions.preauthorizedAgentObjectId;
                 this.correlationId = permissionsOrOptions.correlationId;
             }
@@ -62928,6 +71600,8 @@ class SASQueryParameters {
             this.contentEncoding = contentEncoding;
             this.contentLanguage = contentLanguage;
             this.contentType = contentType;
+            this.requestHeaderKeys = requestHeaderKeys;
+            this.requestQueryParameterKeys = requestQueryParameterKeys;
             if (userDelegationKey) {
                 this.signedOid = userDelegationKey.signedObjectId;
                 this.signedTenantId = userDelegationKey.signedTenantId;
@@ -62935,6 +71609,7 @@ class SASQueryParameters {
                 this.signedExpiresOn = userDelegationKey.signedExpiresOn;
                 this.signedService = userDelegationKey.signedService;
                 this.signedVersion = userDelegationKey.signedVersion;
+                this.signedDelegatedUserTid = userDelegationKey.signedDelegatedUserTenantId;
                 this.preauthorizedAgentObjectId = preauthorizedAgentObjectId;
                 this.correlationId = correlationId;
             }
@@ -62963,7 +71638,6 @@ class SASQueryParameters {
             "skv", // Signed key version
             "sr",
             "sp",
-            "sig",
             "rscc",
             "rscd",
             "rsce",
@@ -62972,6 +71646,10 @@ class SASQueryParameters {
             "saoid",
             "scid",
             "sduoid", // Signed key user delegation object ID
+            "skdutid", // Signed key user delegation tenant ID
+            "srh", // Request Headers
+            "srq", // Request QueryParameters
+            "sig",
         ];
         const queries = [];
         for (const param of params) {
@@ -63021,6 +71699,9 @@ class SASQueryParameters {
                 case "skv": // Signed key version
                     this.tryAppendQueryParameter(queries, param, this.signedVersion);
                     break;
+                case "skdutid":
+                    this.tryAppendQueryParameter(queries, param, this.signedDelegatedUserTid);
+                    break;
                 case "sr":
                     this.tryAppendQueryParameter(queries, param, this.resource);
                     break;
@@ -63053,6 +71734,12 @@ class SASQueryParameters {
                     break;
                 case "sduoid":
                     this.tryAppendQueryParameter(queries, param, this.delegatedUserObjectId);
+                    break;
+                case "srh": // Request headers
+                    this.tryAppendQueryParameter(queries, param, this.requestHeaderKeys);
+                    break;
+                case "srq": // Request headers
+                    this.tryAppendQueryParameter(queries, param, this.requestQueryParameterKeys);
                     break;
             }
         }
@@ -63100,7 +71787,10 @@ function generateBlobSASQueryParametersInternal(blobSASSignatureValues, sharedKe
             return generateBlobSASQueryParameters20201206(blobSASSignatureValues, sharedKeyCredential);
         }
         else {
-            if (version >= "2025-07-05") {
+            if (version >= "2026-04-06") {
+                return generateBlobSASQueryParametersUDK20260406(blobSASSignatureValues, userDelegationKeyCredential);
+            }
+            else if (version >= "2025-07-05") {
                 return generateBlobSASQueryParametersUDK20250705(blobSASSignatureValues, userDelegationKeyCredential);
             }
             else {
@@ -63651,7 +72341,7 @@ function generateBlobSASQueryParametersUDK20250705(blobSASSignatureValues, userD
         blobSASSignatureValues.preauthorizedAgentObjectId,
         undefined, // agentObjectId
         blobSASSignatureValues.correlationId,
-        undefined, // SignedKeyDelegatedUserTenantId, will be added in a future release.
+        userDelegationKeyCredential.userDelegationKey.signedDelegatedUserTenantId, // SignedKeyDelegatedUserTenantId, will be added in a future release.
         blobSASSignatureValues.delegatedUserObjectId,
         blobSASSignatureValues.ipRange ? ipRangeToString(blobSASSignatureValues.ipRange) : "",
         blobSASSignatureValues.protocol ? blobSASSignatureValues.protocol : "",
@@ -63670,6 +72360,134 @@ function generateBlobSASQueryParametersUDK20250705(blobSASSignatureValues, userD
         sasQueryParameters: new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, undefined, undefined, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, userDelegationKeyCredential.userDelegationKey, blobSASSignatureValues.preauthorizedAgentObjectId, blobSASSignatureValues.correlationId, blobSASSignatureValues.encryptionScope, blobSASSignatureValues.delegatedUserObjectId),
         stringToSign: stringToSign,
     };
+}
+/**
+ * ONLY AVAILABLE IN NODE.JS RUNTIME.
+ * IMPLEMENTATION FOR API VERSION FROM 2020-12-06.
+ *
+ * Creates an instance of SASQueryParameters.
+ *
+ * Only accepts required settings needed to create a SAS. For optional settings please
+ * set corresponding properties directly, such as permissions, startsOn.
+ *
+ * WARNING: identifier will be ignored, permissions and expiresOn are required.
+ *
+ * @param blobSASSignatureValues -
+ * @param userDelegationKeyCredential -
+ */
+function generateBlobSASQueryParametersUDK20260406(blobSASSignatureValues, userDelegationKeyCredential) {
+    blobSASSignatureValues = SASSignatureValuesSanityCheckAndAutofill(blobSASSignatureValues);
+    // Stored access policies are not supported for a user delegation SAS.
+    if (!blobSASSignatureValues.permissions || !blobSASSignatureValues.expiresOn) {
+        throw new RangeError("Must provide 'permissions' and 'expiresOn' for Blob SAS generation when generating user delegation SAS.");
+    }
+    let resource = "c";
+    let timestamp = blobSASSignatureValues.snapshotTime;
+    if (blobSASSignatureValues.blobName) {
+        resource = "b";
+        if (blobSASSignatureValues.snapshotTime) {
+            resource = "bs";
+        }
+        else if (blobSASSignatureValues.versionId) {
+            resource = "bv";
+            timestamp = blobSASSignatureValues.versionId;
+        }
+    }
+    // Calling parse and toString guarantees the proper ordering and throws on invalid characters.
+    let verifiedPermissions;
+    if (blobSASSignatureValues.permissions) {
+        if (blobSASSignatureValues.blobName) {
+            verifiedPermissions = BlobSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+        }
+        else {
+            verifiedPermissions = ContainerSASPermissions.parse(blobSASSignatureValues.permissions.toString()).toString();
+        }
+    }
+    // Signature is generated on the un-url-encoded values.
+    const stringToSign = [
+        verifiedPermissions ? verifiedPermissions : "",
+        blobSASSignatureValues.startsOn
+            ? truncatedISO8061Date(blobSASSignatureValues.startsOn, false)
+            : "",
+        blobSASSignatureValues.expiresOn
+            ? truncatedISO8061Date(blobSASSignatureValues.expiresOn, false)
+            : "",
+        getCanonicalName(userDelegationKeyCredential.accountName, blobSASSignatureValues.containerName, blobSASSignatureValues.blobName),
+        userDelegationKeyCredential.userDelegationKey.signedObjectId,
+        userDelegationKeyCredential.userDelegationKey.signedTenantId,
+        userDelegationKeyCredential.userDelegationKey.signedStartsOn
+            ? truncatedISO8061Date(userDelegationKeyCredential.userDelegationKey.signedStartsOn, false)
+            : "",
+        userDelegationKeyCredential.userDelegationKey.signedExpiresOn
+            ? truncatedISO8061Date(userDelegationKeyCredential.userDelegationKey.signedExpiresOn, false)
+            : "",
+        userDelegationKeyCredential.userDelegationKey.signedService,
+        userDelegationKeyCredential.userDelegationKey.signedVersion,
+        blobSASSignatureValues.preauthorizedAgentObjectId,
+        undefined, // agentObjectId
+        blobSASSignatureValues.correlationId,
+        userDelegationKeyCredential.userDelegationKey.signedDelegatedUserTenantId, // SignedKeyDelegatedUserTenantId, will be added in a future release.
+        blobSASSignatureValues.delegatedUserObjectId,
+        blobSASSignatureValues.ipRange ? ipRangeToString(blobSASSignatureValues.ipRange) : "",
+        blobSASSignatureValues.protocol ? blobSASSignatureValues.protocol : "",
+        blobSASSignatureValues.version,
+        resource,
+        timestamp,
+        blobSASSignatureValues.encryptionScope,
+        formatRequestHeadersForSasSigning(blobSASSignatureValues.requestHeaders),
+        formatRequestQueryParametersForSasSigning(blobSASSignatureValues.requestQueryParameters),
+        blobSASSignatureValues.cacheControl,
+        blobSASSignatureValues.contentDisposition,
+        blobSASSignatureValues.contentEncoding,
+        blobSASSignatureValues.contentLanguage,
+        blobSASSignatureValues.contentType,
+    ].join("\n");
+    const signature = userDelegationKeyCredential.computeHMACSHA256(stringToSign);
+    return {
+        sasQueryParameters: new SASQueryParameters(blobSASSignatureValues.version, signature, verifiedPermissions, undefined, undefined, blobSASSignatureValues.protocol, blobSASSignatureValues.startsOn, blobSASSignatureValues.expiresOn, blobSASSignatureValues.ipRange, blobSASSignatureValues.identifier, resource, blobSASSignatureValues.cacheControl, blobSASSignatureValues.contentDisposition, blobSASSignatureValues.contentEncoding, blobSASSignatureValues.contentLanguage, blobSASSignatureValues.contentType, userDelegationKeyCredential.userDelegationKey, blobSASSignatureValues.preauthorizedAgentObjectId, blobSASSignatureValues.correlationId, blobSASSignatureValues.encryptionScope, blobSASSignatureValues.delegatedUserObjectId, getKeysOfRequestHeaders(blobSASSignatureValues.requestHeaders), getKeysOfRequestHeaders(blobSASSignatureValues.requestQueryParameters)),
+        stringToSign: stringToSign,
+    };
+}
+function formatRequestHeadersForSasSigning(requestHeaders) {
+    if (requestHeaders === undefined) {
+        return undefined;
+    }
+    let canonicalValue = "";
+    Object.keys(requestHeaders).forEach(function (key) {
+        // key: the name of the object key
+        // index: the ordinal position of the key within the object
+        canonicalValue = canonicalValue + key + ":" + requestHeaders[key] + "\n";
+    });
+    return canonicalValue;
+}
+function formatRequestQueryParametersForSasSigning(queryParameters) {
+    if (queryParameters === undefined) {
+        return undefined;
+    }
+    let canonicalValue = "";
+    Object.keys(queryParameters).forEach(function (key) {
+        // key: the name of the object key
+        // index: the ordinal position of the key within the object
+        canonicalValue = canonicalValue + "\n" + key + ":" + queryParameters[key];
+    });
+    return canonicalValue;
+}
+function getKeysOfRequestHeaders(requestHeaders) {
+    if (requestHeaders === undefined) {
+        return undefined;
+    }
+    let requestKeys = "";
+    let index = 0;
+    Object.keys(requestHeaders).forEach(function (key) {
+        // key: the name of the object key
+        // index: the ordinal position of the key within the object
+        if (index !== 0) {
+            requestKeys = requestKeys + ",";
+        }
+        requestKeys = requestKeys + key;
+        ++index;
+    });
+    return requestKeys;
 }
 function getCanonicalName(accountName, containerName, blobName) {
     // Container: "/blob/account/containerName"
@@ -64026,6 +72844,7 @@ class RetriableReadableStream extends Readable$1 {
             this.push(null);
         }
         else if (this.offset <= this.end) {
+            // TODO if error is CRC64 not match, directly throw out the error.
             // console.log(
             //   `retries: ${this.retries}, max retries: ${this.maxRetries}`
             // );
@@ -64477,6 +73296,9 @@ class BlobDownloadResponse {
     get legalHold() {
         return this.originalResponse.legalHold;
     }
+    get structuredBodyType() {
+        return this.originalResponse.structuredBodyType;
+    }
     /**
      * The response body as a browser Blob.
      * Always undefined in node.js.
@@ -64495,7 +73317,7 @@ class BlobDownloadResponse {
      * @readonly
      */
     get readableStreamBody() {
-        return isNodeLike ? this.blobDownloadStream : undefined;
+        return this.blobDownloadStream ;
     }
     /**
      * The HTTP response.
@@ -64516,7 +73338,10 @@ class BlobDownloadResponse {
      */
     constructor(originalResponse, getter, offset, count, options = {}) {
         this.originalResponse = originalResponse;
-        this.blobDownloadStream = new RetriableReadableStream(this.originalResponse.readableStreamBody, getter, offset, count, options);
+        const streamBody = this.originalResponse.structuredBodyType === undefined
+            ? this.originalResponse.readableStreamBody
+            : structuredMessageDecodingStream(this.originalResponse.readableStreamBody, options);
+        this.blobDownloadStream = new RetriableReadableStream(streamBody, getter, offset, count, options);
     }
 }
 
@@ -65526,7 +74351,7 @@ class BlobQueryResponse {
      * @readonly
      */
     get readableStreamBody() {
-        return isNodeLike ? this.blobDownloadStream : undefined;
+        return this.blobDownloadStream ;
     }
     /**
      * The HTTP response.
@@ -66382,22 +75207,30 @@ async function streamToBuffer(stream, buffer, offset, end, encoding) {
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error(`The operation cannot be completed in timeout.`)), REQUEST_TIMEOUT);
         stream.on("readable", () => {
+            // Already filled the requested amount; ignore any further `readable` events.
             if (pos >= count) {
                 clearTimeout(timeout);
                 resolve();
                 return;
             }
-            let chunk = stream.read();
-            if (!chunk) {
-                return;
+            // Drain all currently-buffered chunks. Required since Node.js v26, where
+            // `stream.read()` returns one buffered chunk at a time instead of the
+            // concatenation of all queued data (see nodejs/node#60441).
+            let chunk;
+            while ((chunk = stream.read()) !== null) {
+                if (typeof chunk === "string") {
+                    chunk = Buffer.from(chunk, encoding);
+                }
+                // How much data needed in this chunk
+                const chunkLength = pos + chunk.length > count ? count - pos : chunk.length;
+                buffer.fill(chunk.slice(0, chunkLength), offset + pos, offset + pos + chunkLength);
+                pos += chunkLength;
+                if (pos >= count) {
+                    clearTimeout(timeout);
+                    resolve();
+                    return;
+                }
             }
-            if (typeof chunk === "string") {
-                chunk = Buffer.from(chunk, encoding);
-            }
-            // How much data needed in this chunk
-            const chunkLength = pos + chunk.length > count ? count - pos : chunk.length;
-            buffer.fill(chunk.slice(0, chunkLength), offset + pos, offset + pos + chunkLength);
-            pos += chunkLength;
         });
         stream.on("end", () => {
             clearTimeout(timeout);
@@ -66457,6 +75290,10 @@ class BlobClient extends StorageClient {
     _versionId;
     _snapshot;
     /**
+     * Config used in creating blob client instances.
+     */
+    blobClientConfig;
+    /**
      * The name of the blob.
      */
     get name() {
@@ -66479,8 +75316,9 @@ class BlobClient extends StorageClient {
             // (url: string, pipeline: Pipeline)
             url = urlOrConnectionString;
             pipeline = credentialOrPipelineOrContainerName;
+            options = blobNameOrOptions;
         }
-        else if ((isNodeLike && credentialOrPipelineOrContainerName instanceof StorageSharedKeyCredential) ||
+        else if ((credentialOrPipelineOrContainerName instanceof StorageSharedKeyCredential) ||
             credentialOrPipelineOrContainerName instanceof AnonymousCredential ||
             isTokenCredential(credentialOrPipelineOrContainerName)) {
             // (url: string, credential?: StorageSharedKeyCredential | AnonymousCredential | TokenCredential, options?: StoragePipelineOptions)
@@ -66507,16 +75345,13 @@ class BlobClient extends StorageClient {
             const blobName = blobNameOrOptions;
             const extractedCreds = extractConnectionStringParts(urlOrConnectionString);
             if (extractedCreds.kind === "AccountConnString") {
-                if (isNodeLike) {
+                {
                     const sharedKeyCredential = new StorageSharedKeyCredential(extractedCreds.accountName, extractedCreds.accountKey);
                     url = appendToURLPath(appendToURLPath(extractedCreds.url, encodeURIComponent(containerName)), encodeURIComponent(blobName));
                     if (!options.proxyOptions) {
                         options.proxyOptions = getDefaultProxySettings(extractedCreds.proxyUri);
                     }
                     pipeline = newPipeline(sharedKeyCredential, options);
-                }
-                else {
-                    throw new Error("Account connection string is only supported in Node.js environment");
                 }
             }
             else if (extractedCreds.kind === "SASConnString") {
@@ -66539,6 +75374,7 @@ class BlobClient extends StorageClient {
         this.blobContext = this.storageClientContext.blob;
         this._snapshot = getURLParameter(this.url, URLConstants.Parameters.SNAPSHOT);
         this._versionId = getURLParameter(this.url, URLConstants.Parameters.VERSIONID);
+        this.blobClientConfig = options;
     }
     /**
      * Creates a new BlobClient object identical to the source but with the specified snapshot timestamp.
@@ -66548,7 +75384,7 @@ class BlobClient extends StorageClient {
      * @returns A new BlobClient object identical to the source but with the specified snapshot timestamp
      */
     withSnapshot(snapshot) {
-        return new BlobClient(setURLParameter(this.url, URLConstants.Parameters.SNAPSHOT, snapshot.length === 0 ? undefined : snapshot), this.pipeline);
+        return new BlobClient(setURLParameter(this.url, URLConstants.Parameters.SNAPSHOT, snapshot.length === 0 ? undefined : snapshot), this.pipeline, this.blobClientConfig);
     }
     /**
      * Creates a new BlobClient object pointing to a version of this blob.
@@ -66558,28 +75394,28 @@ class BlobClient extends StorageClient {
      * @returns A new BlobClient object pointing to the version of this blob.
      */
     withVersion(versionId) {
-        return new BlobClient(setURLParameter(this.url, URLConstants.Parameters.VERSIONID, versionId.length === 0 ? undefined : versionId), this.pipeline);
+        return new BlobClient(setURLParameter(this.url, URLConstants.Parameters.VERSIONID, versionId.length === 0 ? undefined : versionId), this.pipeline, this.blobClientConfig);
     }
     /**
      * Creates a AppendBlobClient object.
      *
      */
     getAppendBlobClient() {
-        return new AppendBlobClient(this.url, this.pipeline);
+        return new AppendBlobClient(this.url, this.pipeline, this.blobClientConfig);
     }
     /**
      * Creates a BlockBlobClient object.
      *
      */
     getBlockBlobClient() {
-        return new BlockBlobClient(this.url, this.pipeline);
+        return new BlockBlobClient(this.url, this.pipeline, this.blobClientConfig);
     }
     /**
      * Creates a PageBlobClient object.
      *
      */
     getPageBlobClient() {
-        return new PageBlobClient(this.url, this.pipeline);
+        return new PageBlobClient(this.url, this.pipeline, this.blobClientConfig);
     }
     /**
      * Reads or downloads a blob from the system, including its metadata and properties.
@@ -66667,6 +75503,16 @@ class BlobClient extends StorageClient {
         options.conditions = options.conditions || {};
         ensureCpkIfSpecified(options.customerProvidedKey, this.isHttps);
         return tracingClient.withSpan("BlobClient-download", options, async (updatedOptions) => {
+            let contentChecksumAlgorithm = options.contentChecksumAlgorithm ?? this.blobClientConfig?.downloadContentChecksumAlgorithm;
+            if (contentChecksumAlgorithm === undefined) {
+                contentChecksumAlgorithm = "Customized";
+            }
+            else if (contentChecksumAlgorithm === "Auto") {
+                contentChecksumAlgorithm = "StorageCrc64";
+            }
+            if (contentChecksumAlgorithm === "StorageCrc64") {
+                await StorageCRC64Calculator.init();
+            }
             const res = assertResponse((await this.blobContext.download({
                 abortSignal: options.abortSignal,
                 leaseAccessConditions: options.conditions,
@@ -66675,7 +75521,7 @@ class BlobClient extends StorageClient {
                     ifTags: options.conditions?.tagConditions,
                 },
                 requestOptions: {
-                    onDownloadProgress: isNodeLike ? undefined : options.onProgress, // for Node.js, progress is reported by RetriableReadableStream
+                    onDownloadProgress: undefined , // for Node.js, progress is reported by RetriableReadableStream
                 },
                 range: offset === 0 && !count ? undefined : rangeToString({ offset, count }),
                 rangeGetContentMD5: options.rangeGetContentMD5,
@@ -66683,6 +75529,7 @@ class BlobClient extends StorageClient {
                 snapshot: options.snapshot,
                 cpkInfo: options.customerProvidedKey,
                 tracingOptions: updatedOptions.tracingOptions,
+                structuredBodyType: contentChecksumAlgorithm === "StorageCrc64" ? "XSM/1.0; properties=crc64" : undefined,
             })));
             const wrappedRes = {
                 ...res,
@@ -66690,10 +75537,6 @@ class BlobClient extends StorageClient {
                 objectReplicationDestinationPolicyId: res.objectReplicationPolicyId,
                 objectReplicationSourceProperties: parseObjectReplicationRecord(res.objectReplicationRules),
             };
-            // Return browser response immediately
-            if (!isNodeLike) {
-                return wrappedRes;
-            }
             // We support retrying when download stream unexpected ends in Node.js runtime
             // Following code shouldn't be bundled into browser build, however some
             // bundlers may try to bundle following code and "FileReadResponse.ts".
@@ -66706,9 +75549,16 @@ class BlobClient extends StorageClient {
             if (res.contentLength === undefined) {
                 throw new RangeError(`File download response doesn't contain valid content length header`);
             }
+            if (contentChecksumAlgorithm === "StorageCrc64" &&
+                res.structuredContentLength === undefined) {
+                throw new RangeError(`Unexpected structured content length`);
+            }
             if (!res.etag) {
                 throw new RangeError(`File download response doesn't contain valid etag header`);
             }
+            const expectedContentLength = contentChecksumAlgorithm === "StorageCrc64"
+                ? res.structuredContentLength
+                : res.contentLength;
             return new BlobDownloadResponse(wrappedRes, async (start) => {
                 const updatedDownloadOptions = {
                     leaseAccessConditions: options.conditions,
@@ -66720,13 +75570,14 @@ class BlobClient extends StorageClient {
                         ifTags: options.conditions?.tagConditions,
                     },
                     range: rangeToString({
-                        count: offset + res.contentLength - start,
+                        count: offset + expectedContentLength - start,
                         offset: start,
                     }),
                     rangeGetContentMD5: options.rangeGetContentMD5,
                     rangeGetContentCRC64: options.rangeGetContentCrc64,
                     snapshot: options.snapshot,
                     cpkInfo: options.customerProvidedKey,
+                    structuredBodyType: contentChecksumAlgorithm === "StorageCrc64" ? "XSM/1.0; properties=crc64" : undefined,
                 };
                 // Debug purpose only
                 // console.log(
@@ -66734,11 +75585,17 @@ class BlobClient extends StorageClient {
                 //     updatedOptions.range
                 //   }, options: ${JSON.stringify(updatedOptions)}`
                 // );
-                return (await this.blobContext.download({
+                const resBody = (await this.blobContext.download({
                     abortSignal: options.abortSignal,
                     ...updatedDownloadOptions,
                 })).readableStreamBody;
-            }, offset, res.contentLength, {
+                if (contentChecksumAlgorithm === "StorageCrc64") {
+                    return structuredMessageDecodingStream(resBody, {});
+                }
+                else {
+                    return resBody;
+                }
+            }, offset, expectedContentLength, {
                 maxRetryRequests: options.maxRetryRequests,
                 onProgress: options.onProgress,
             });
@@ -66835,6 +75692,8 @@ class BlobClient extends StorageClient {
                     ifTags: options.conditions?.tagConditions,
                 },
                 tracingOptions: updatedOptions.tracingOptions,
+                accessTierIfModifiedSince: options.conditions?.accessTierIfModifiedSince,
+                accessTierIfUnmodifiedSince: options.conditions?.accessTierIfUnmodifiedSince,
             }));
         });
     }
@@ -67271,6 +76130,7 @@ class BlobClient extends StorageClient {
                         conditions: options.conditions,
                         maxRetryRequests: options.maxRetryRequestsPerBlock,
                         customerProvidedKey: options.customerProvidedKey,
+                        contentChecksumAlgorithm: options.contentChecksumAlgorithm,
                         tracingOptions: updatedOptions.tracingOptions,
                     });
                     const stream = response.readableStreamBody;
@@ -67582,8 +76442,9 @@ class AppendBlobClient extends BlobClient {
             // (url: string, pipeline: Pipeline)
             url = urlOrConnectionString;
             pipeline = credentialOrPipelineOrContainerName;
+            options = blobNameOrOptions;
         }
-        else if ((isNodeLike && credentialOrPipelineOrContainerName instanceof StorageSharedKeyCredential) ||
+        else if ((credentialOrPipelineOrContainerName instanceof StorageSharedKeyCredential) ||
             credentialOrPipelineOrContainerName instanceof AnonymousCredential ||
             isTokenCredential(credentialOrPipelineOrContainerName)) {
             // (url: string, credential?: StorageSharedKeyCredential | AnonymousCredential | TokenCredential, options?: StoragePipelineOptions)      url = urlOrConnectionString;
@@ -67595,6 +76456,7 @@ class AppendBlobClient extends BlobClient {
             typeof credentialOrPipelineOrContainerName !== "string") {
             // (url: string, credential?: StorageSharedKeyCredential | AnonymousCredential | TokenCredential, options?: StoragePipelineOptions)
             url = urlOrConnectionString;
+            options = blobNameOrOptions;
             // The second parameter is undefined. Use anonymous credential.
             pipeline = newPipeline(new AnonymousCredential(), options);
         }
@@ -67607,16 +76469,13 @@ class AppendBlobClient extends BlobClient {
             const blobName = blobNameOrOptions;
             const extractedCreds = extractConnectionStringParts(urlOrConnectionString);
             if (extractedCreds.kind === "AccountConnString") {
-                if (isNodeLike) {
+                {
                     const sharedKeyCredential = new StorageSharedKeyCredential(extractedCreds.accountName, extractedCreds.accountKey);
                     url = appendToURLPath(appendToURLPath(extractedCreds.url, encodeURIComponent(containerName)), encodeURIComponent(blobName));
                     if (!options.proxyOptions) {
                         options.proxyOptions = getDefaultProxySettings(extractedCreds.proxyUri);
                     }
                     pipeline = newPipeline(sharedKeyCredential, options);
-                }
-                else {
-                    throw new Error("Account connection string is only supported in Node.js environment");
                 }
             }
             else if (extractedCreds.kind === "SASConnString") {
@@ -67635,6 +76494,7 @@ class AppendBlobClient extends BlobClient {
         }
         super(url, pipeline);
         this.appendBlobContext = this.storageClientContext.appendBlob;
+        this.blobClientConfig = options;
     }
     /**
      * Creates a new AppendBlobClient object identical to the source but with the
@@ -67645,7 +76505,7 @@ class AppendBlobClient extends BlobClient {
      * @returns A new AppendBlobClient object identical to the source but with the specified snapshot timestamp.
      */
     withSnapshot(snapshot) {
-        return new AppendBlobClient(setURLParameter(this.url, URLConstants.Parameters.SNAPSHOT, snapshot.length === 0 ? undefined : snapshot), this.pipeline);
+        return new AppendBlobClient(setURLParameter(this.url, URLConstants.Parameters.SNAPSHOT, snapshot.length === 0 ? undefined : snapshot), this.pipeline, this.blobClientConfig);
     }
     /**
      * Creates a 0-length append blob. Call AppendBlock to append data to an append blob.
@@ -67791,7 +76651,7 @@ class AppendBlobClient extends BlobClient {
         options.conditions = options.conditions || {};
         ensureCpkIfSpecified(options.customerProvidedKey, this.isHttps);
         return tracingClient.withSpan("AppendBlobClient-appendBlock", options, async (updatedOptions) => {
-            return assertResponse(await this.appendBlobContext.appendBlock(contentLength, body, {
+            const parameters = {
                 abortSignal: options.abortSignal,
                 appendPositionAccessConditions: options.conditions,
                 leaseAccessConditions: options.conditions,
@@ -67802,12 +76662,12 @@ class AppendBlobClient extends BlobClient {
                 requestOptions: {
                     onUploadProgress: options.onProgress,
                 },
-                transactionalContentMD5: options.transactionalContentMD5,
-                transactionalContentCrc64: options.transactionalContentCrc64,
                 cpkInfo: options.customerProvidedKey,
                 encryptionScope: options.encryptionScope,
                 tracingOptions: updatedOptions.tracingOptions,
-            }));
+            };
+            const uploadBodyParameters = await setUploadChecksumParameters(body, contentLength, parameters, options, this.blobClientConfig?.uploadContentChecksumAlgorithm);
+            return assertResponse(await this.appendBlobContext.appendBlock(uploadBodyParameters.contentLength, uploadBodyParameters.body, parameters));
         });
     }
     /**
@@ -67851,6 +76711,11 @@ class AppendBlobClient extends BlobClient {
                 encryptionScope: options.encryptionScope,
                 fileRequestIntent: options.sourceShareTokenIntent,
                 tracingOptions: updatedOptions.tracingOptions,
+                sourceCpkInfo: {
+                    sourceEncryptionKey: options.sourceCustomerProvidedKey?.encryptionKey,
+                    sourceEncryptionAlgorithm: options.sourceCustomerProvidedKey?.encryptionAlgorithm,
+                    sourceEncryptionKeySha256: options.sourceCustomerProvidedKey?.encryptionKeySha256,
+                },
             }));
         });
     }
@@ -67883,8 +76748,9 @@ class BlockBlobClient extends BlobClient {
             // (url: string, pipeline: Pipeline)
             url = urlOrConnectionString;
             pipeline = credentialOrPipelineOrContainerName;
+            options = blobNameOrOptions;
         }
-        else if ((isNodeLike && credentialOrPipelineOrContainerName instanceof StorageSharedKeyCredential) ||
+        else if ((credentialOrPipelineOrContainerName instanceof StorageSharedKeyCredential) ||
             credentialOrPipelineOrContainerName instanceof AnonymousCredential ||
             isTokenCredential(credentialOrPipelineOrContainerName)) {
             // (url: string, credential?: StorageSharedKeyCredential | AnonymousCredential | TokenCredential, options?: StoragePipelineOptions)
@@ -67911,16 +76777,13 @@ class BlockBlobClient extends BlobClient {
             const blobName = blobNameOrOptions;
             const extractedCreds = extractConnectionStringParts(urlOrConnectionString);
             if (extractedCreds.kind === "AccountConnString") {
-                if (isNodeLike) {
+                {
                     const sharedKeyCredential = new StorageSharedKeyCredential(extractedCreds.accountName, extractedCreds.accountKey);
                     url = appendToURLPath(appendToURLPath(extractedCreds.url, encodeURIComponent(containerName)), encodeURIComponent(blobName));
                     if (!options.proxyOptions) {
                         options.proxyOptions = getDefaultProxySettings(extractedCreds.proxyUri);
                     }
                     pipeline = newPipeline(sharedKeyCredential, options);
-                }
-                else {
-                    throw new Error("Account connection string is only supported in Node.js environment");
                 }
             }
             else if (extractedCreds.kind === "SASConnString") {
@@ -67940,6 +76803,7 @@ class BlockBlobClient extends BlobClient {
         super(url, pipeline);
         this.blockBlobContext = this.storageClientContext.blockBlob;
         this._blobContext = this.storageClientContext.blob;
+        this.blobClientConfig = options;
     }
     /**
      * Creates a new BlockBlobClient object identical to the source but with the
@@ -67950,7 +76814,7 @@ class BlockBlobClient extends BlobClient {
      * @returns A new BlockBlobClient object identical to the source but with the specified snapshot timestamp.
      */
     withSnapshot(snapshot) {
-        return new BlockBlobClient(setURLParameter(this.url, URLConstants.Parameters.SNAPSHOT, snapshot.length === 0 ? undefined : snapshot), this.pipeline);
+        return new BlockBlobClient(setURLParameter(this.url, URLConstants.Parameters.SNAPSHOT, snapshot.length === 0 ? undefined : snapshot), this.pipeline, this.blobClientConfig);
     }
     /**
      * ONLY AVAILABLE IN NODE.JS RUNTIME.
@@ -68001,9 +76865,6 @@ class BlockBlobClient extends BlobClient {
      */
     async query(query, options = {}) {
         ensureCpkIfSpecified(options.customerProvidedKey, this.isHttps);
-        if (!isNodeLike) {
-            throw new Error("This operation currently is only supported in Node.js.");
-        }
         return tracingClient.withSpan("BlockBlobClient-query", options, async (updatedOptions) => {
             const response = assertResponse((await this._blobContext.query({
                 abortSignal: options.abortSignal,
@@ -68073,7 +76934,7 @@ class BlockBlobClient extends BlobClient {
         options.conditions = options.conditions || {};
         ensureCpkIfSpecified(options.customerProvidedKey, this.isHttps);
         return tracingClient.withSpan("BlockBlobClient-upload", options, async (updatedOptions) => {
-            return assertResponse(await this.blockBlobContext.upload(contentLength, body, {
+            const parameters = {
                 abortSignal: options.abortSignal,
                 blobHttpHeaders: options.blobHTTPHeaders,
                 leaseAccessConditions: options.conditions,
@@ -68093,7 +76954,9 @@ class BlockBlobClient extends BlobClient {
                 tier: toAccessTier(options.tier),
                 blobTagsString: toBlobTagsString(options.tags),
                 tracingOptions: updatedOptions.tracingOptions,
-            }));
+            };
+            const uploadBodyParameters = await setUploadChecksumParameters(body, contentLength, parameters, options, this.blobClientConfig?.uploadContentChecksumAlgorithm);
+            return assertResponse(await this.blockBlobContext.upload(uploadBodyParameters.contentLength, uploadBodyParameters.body, parameters));
         });
     }
     /**
@@ -68140,6 +77003,11 @@ class BlockBlobClient extends BlobClient {
                 copySourceTags: options.copySourceTags,
                 fileRequestIntent: options.sourceShareTokenIntent,
                 tracingOptions: updatedOptions.tracingOptions,
+                sourceCpkInfo: {
+                    sourceEncryptionKey: options.sourceCustomerProvidedKey?.encryptionKey,
+                    sourceEncryptionAlgorithm: options.sourceCustomerProvidedKey?.encryptionAlgorithm,
+                    sourceEncryptionKeySha256: options.sourceCustomerProvidedKey?.encryptionKeySha256,
+                },
             }));
         });
     }
@@ -68157,18 +77025,18 @@ class BlockBlobClient extends BlobClient {
     async stageBlock(blockId, body, contentLength, options = {}) {
         ensureCpkIfSpecified(options.customerProvidedKey, this.isHttps);
         return tracingClient.withSpan("BlockBlobClient-stageBlock", options, async (updatedOptions) => {
-            return assertResponse(await this.blockBlobContext.stageBlock(blockId, contentLength, body, {
+            const parameters = {
                 abortSignal: options.abortSignal,
                 leaseAccessConditions: options.conditions,
                 requestOptions: {
                     onUploadProgress: options.onProgress,
                 },
-                transactionalContentMD5: options.transactionalContentMD5,
-                transactionalContentCrc64: options.transactionalContentCrc64,
                 cpkInfo: options.customerProvidedKey,
                 encryptionScope: options.encryptionScope,
                 tracingOptions: updatedOptions.tracingOptions,
-            }));
+            };
+            const uploadBodyParameters = await setUploadChecksumParameters(body, contentLength, parameters, options, this.blobClientConfig?.uploadContentChecksumAlgorithm);
+            return assertResponse(await this.blockBlobContext.stageBlock(blockId, uploadBodyParameters.contentLength, uploadBodyParameters.body, parameters));
         });
     }
     /**
@@ -68206,6 +77074,11 @@ class BlockBlobClient extends BlobClient {
                 copySourceAuthorization: httpAuthorizationToString(options.sourceAuthorization),
                 fileRequestIntent: options.sourceShareTokenIntent,
                 tracingOptions: updatedOptions.tracingOptions,
+                sourceCpkInfo: {
+                    sourceEncryptionKey: options.sourceCustomerProvidedKey?.encryptionKey,
+                    sourceEncryptionAlgorithm: options.sourceCustomerProvidedKey?.encryptionAlgorithm,
+                    sourceEncryptionKeySha256: options.sourceCustomerProvidedKey?.encryptionKeySha256,
+                },
             }));
         });
     }
@@ -68293,7 +77166,7 @@ class BlockBlobClient extends BlobClient {
      */
     async uploadData(data, options = {}) {
         return tracingClient.withSpan("BlockBlobClient-uploadData", options, async (updatedOptions) => {
-            if (isNodeLike) {
+            {
                 let buffer;
                 if (data instanceof Buffer) {
                     buffer = data;
@@ -68306,10 +77179,6 @@ class BlockBlobClient extends BlobClient {
                     buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
                 }
                 return this.uploadSeekableInternal((offset, size) => buffer.slice(offset, offset + size), buffer.byteLength, updatedOptions);
-            }
-            else {
-                const browserBlob = new Blob([data]);
-                return this.uploadSeekableInternal((offset, size) => browserBlob.slice(offset, offset + size), browserBlob.size, updatedOptions);
             }
         });
     }
@@ -68404,6 +77273,7 @@ class BlockBlobClient extends BlobClient {
                         conditions: options.conditions,
                         encryptionScope: options.encryptionScope,
                         tracingOptions: updatedOptions.tracingOptions,
+                        contentChecksumAlgorithm: options.contentChecksumAlgorithm,
                     });
                     // Update progress after block is successfully uploaded to server, in case of block trying
                     // TODO: Hook with convenience layer progress event in finer level
@@ -68484,6 +77354,7 @@ class BlockBlobClient extends BlobClient {
                     conditions: options.conditions,
                     encryptionScope: options.encryptionScope,
                     tracingOptions: updatedOptions.tracingOptions,
+                    contentChecksumAlgorithm: options.contentChecksumAlgorithm,
                 });
                 // Update progress after block is successfully uploaded to server, in case of block trying
                 transferProgress += length;
@@ -68525,8 +77396,9 @@ class PageBlobClient extends BlobClient {
             // (url: string, pipeline: Pipeline)
             url = urlOrConnectionString;
             pipeline = credentialOrPipelineOrContainerName;
+            options = blobNameOrOptions;
         }
-        else if ((isNodeLike && credentialOrPipelineOrContainerName instanceof StorageSharedKeyCredential) ||
+        else if ((credentialOrPipelineOrContainerName instanceof StorageSharedKeyCredential) ||
             credentialOrPipelineOrContainerName instanceof AnonymousCredential ||
             isTokenCredential(credentialOrPipelineOrContainerName)) {
             // (url: string, credential?: StorageSharedKeyCredential | AnonymousCredential | TokenCredential, options?: StoragePipelineOptions)
@@ -68539,6 +77411,7 @@ class PageBlobClient extends BlobClient {
             // (url: string, credential?: StorageSharedKeyCredential | AnonymousCredential | TokenCredential, options?: StoragePipelineOptions)
             // The second parameter is undefined. Use anonymous credential.
             url = urlOrConnectionString;
+            options = blobNameOrOptions;
             pipeline = newPipeline(new AnonymousCredential(), options);
         }
         else if (credentialOrPipelineOrContainerName &&
@@ -68550,16 +77423,13 @@ class PageBlobClient extends BlobClient {
             const blobName = blobNameOrOptions;
             const extractedCreds = extractConnectionStringParts(urlOrConnectionString);
             if (extractedCreds.kind === "AccountConnString") {
-                if (isNodeLike) {
+                {
                     const sharedKeyCredential = new StorageSharedKeyCredential(extractedCreds.accountName, extractedCreds.accountKey);
                     url = appendToURLPath(appendToURLPath(extractedCreds.url, encodeURIComponent(containerName)), encodeURIComponent(blobName));
                     if (!options.proxyOptions) {
                         options.proxyOptions = getDefaultProxySettings(extractedCreds.proxyUri);
                     }
                     pipeline = newPipeline(sharedKeyCredential, options);
-                }
-                else {
-                    throw new Error("Account connection string is only supported in Node.js environment");
                 }
             }
             else if (extractedCreds.kind === "SASConnString") {
@@ -68578,6 +77448,7 @@ class PageBlobClient extends BlobClient {
         }
         super(url, pipeline);
         this.pageBlobContext = this.storageClientContext.pageBlob;
+        this.blobClientConfig = options;
     }
     /**
      * Creates a new PageBlobClient object identical to the source but with the
@@ -68588,7 +77459,7 @@ class PageBlobClient extends BlobClient {
      * @returns A new PageBlobClient object identical to the source but with the specified snapshot timestamp.
      */
     withSnapshot(snapshot) {
-        return new PageBlobClient(setURLParameter(this.url, URLConstants.Parameters.SNAPSHOT, snapshot.length === 0 ? undefined : snapshot), this.pipeline);
+        return new PageBlobClient(setURLParameter(this.url, URLConstants.Parameters.SNAPSHOT, snapshot.length === 0 ? undefined : snapshot), this.pipeline, this.blobClientConfig);
     }
     /**
      * Creates a page blob of the specified length. Call uploadPages to upload data
@@ -68674,7 +77545,7 @@ class PageBlobClient extends BlobClient {
         options.conditions = options.conditions || {};
         ensureCpkIfSpecified(options.customerProvidedKey, this.isHttps);
         return tracingClient.withSpan("PageBlobClient-uploadPages", options, async (updatedOptions) => {
-            return assertResponse(await this.pageBlobContext.uploadPages(count, body, {
+            const parameters = {
                 abortSignal: options.abortSignal,
                 leaseAccessConditions: options.conditions,
                 modifiedAccessConditions: {
@@ -68686,12 +77557,12 @@ class PageBlobClient extends BlobClient {
                 },
                 range: rangeToString({ offset, count }),
                 sequenceNumberAccessConditions: options.conditions,
-                transactionalContentMD5: options.transactionalContentMD5,
-                transactionalContentCrc64: options.transactionalContentCrc64,
                 cpkInfo: options.customerProvidedKey,
                 encryptionScope: options.encryptionScope,
                 tracingOptions: updatedOptions.tracingOptions,
-            }));
+            };
+            const uploadBodyParameters = await setUploadChecksumParameters(body, count, parameters, options, this.blobClientConfig?.uploadContentChecksumAlgorithm);
+            return assertResponse(await this.pageBlobContext.uploadPages(uploadBodyParameters.contentLength, uploadBodyParameters.body, parameters));
         });
     }
     /**
@@ -68731,6 +77602,11 @@ class PageBlobClient extends BlobClient {
                 copySourceAuthorization: httpAuthorizationToString(options.sourceAuthorization),
                 fileRequestIntent: options.sourceShareTokenIntent,
                 tracingOptions: updatedOptions.tracingOptions,
+                sourceCpkInfo: {
+                    sourceEncryptionKey: options.sourceCustomerProvidedKey?.encryptionKey,
+                    sourceEncryptionAlgorithm: options.sourceCustomerProvidedKey?.encryptionAlgorithm,
+                    sourceEncryptionKeySha256: options.sourceCustomerProvidedKey?.encryptionKeySha256,
+                },
             }));
         });
     }
@@ -69286,7 +78162,7 @@ NetworkError.isNetworkErrorCode = (code) => {
 };
 class UsageError extends Error {
     constructor() {
-        const message = `Cache storage quota has been hit. Unable to upload any new cache entries. Usage is recalculated every 6-12 hours.\nMore info on storage limits: https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions#calculating-minute-and-storage-spending`;
+        const message = `Cache storage quota has been hit. Unable to upload any new cache entries.\nMore info on storage limits: https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions#calculating-minute-and-storage-spending`;
         super(message);
         this.name = 'UsageError';
     }
@@ -69816,6 +78692,19 @@ function getCacheServiceVersion() {
         return 'v1';
     return process.env['ACTIONS_CACHE_SERVICE_V2'] ? 'v2' : 'v1';
 }
+// The cache-mode lattice: readable = {read, write}, writable = {write,
+// write-only}, none = neither.
+const KNOWN_CACHE_MODES = ['none', 'read', 'write', 'write-only'];
+// The effective cache-mode exported by the runner, or '' when not set.
+function getCacheMode() {
+    return (process.env['ACTIONS_CACHE_MODE'] || '').trim().toLowerCase();
+}
+// Unset or unrecognized modes are permissive so behavior matches today.
+function isCacheReadable(mode) {
+    if (!KNOWN_CACHE_MODES.includes(mode))
+        return true;
+    return mode === 'read' || mode === 'write';
+}
 function getCacheServiceURL() {
     const version = getCacheServiceVersion();
     // Based on the version of the cache service, we will determine which
@@ -69832,7 +78721,7 @@ function getCacheServiceURL() {
     }
 }
 
-var version = "6.0.0";
+var version = "6.2.0";
 var require$$0 = {
 	version: version};
 
@@ -69897,6 +78786,7 @@ function createHttpClient() {
 }
 function getCacheEntry(keys, paths, options) {
     return __awaiter$5(this, void 0, void 0, function* () {
+        var _a;
         const httpClient = createHttpClient();
         const version = getCacheVersion(paths, options === null || options === void 0 ? void 0 : options.compressionMethod, options === null || options === void 0 ? void 0 : options.enableCrossOsArchive);
         const resource = `cache?keys=${encodeURIComponent(keys.join(','))}&version=${version}`;
@@ -69910,6 +78800,12 @@ function getCacheEntry(keys, paths, options) {
             return null;
         }
         if (!isSuccessStatusCode(response.statusCode)) {
+            // Only surface the receiver's body for a `cache read denied:` policy denial
+            // so callers can dispatch on it; keep the generic message otherwise.
+            const errorMessage = (_a = response.error) === null || _a === void 0 ? void 0 : _a.message;
+            if (errorMessage === null || errorMessage === void 0 ? void 0 : errorMessage.includes(CacheReadDeniedMessagePrefix)) {
+                throw new Error(errorMessage);
+            }
             throw new Error(`Cache service responded with ${response.statusCode}`);
         }
         const cacheResult = response.result;
@@ -73776,19 +82672,19 @@ function getTarArgs(tarPath_1, compressionMethod_1, type_1) {
             case 'create':
                 args.push('--posix', '-cf', BSD_TAR_ZSTD
                     ? tarFile
-                    : cacheFileName.replace(new RegExp(`\\${path.sep}`, 'g'), '/'), '--exclude', BSD_TAR_ZSTD
+                    : cacheFileName.replace(new RegExp(`\\${path$1.sep}`, 'g'), '/'), '--exclude', BSD_TAR_ZSTD
                     ? tarFile
-                    : cacheFileName.replace(new RegExp(`\\${path.sep}`, 'g'), '/'), '-P', '-C', workingDirectory.replace(new RegExp(`\\${path.sep}`, 'g'), '/'), '--files-from', ManifestFilename);
+                    : cacheFileName.replace(new RegExp(`\\${path$1.sep}`, 'g'), '/'), '-P', '-C', workingDirectory.replace(new RegExp(`\\${path$1.sep}`, 'g'), '/'), '--files-from', ManifestFilename);
                 break;
             case 'extract':
                 args.push('-xf', BSD_TAR_ZSTD
                     ? tarFile
-                    : archivePath.replace(new RegExp(`\\${path.sep}`, 'g'), '/'), '-P', '-C', workingDirectory.replace(new RegExp(`\\${path.sep}`, 'g'), '/'));
+                    : archivePath.replace(new RegExp(`\\${path$1.sep}`, 'g'), '/'), '-P', '-C', workingDirectory.replace(new RegExp(`\\${path$1.sep}`, 'g'), '/'));
                 break;
             case 'list':
                 args.push('-tf', BSD_TAR_ZSTD
                     ? tarFile
-                    : archivePath.replace(new RegExp(`\\${path.sep}`, 'g'), '/'), '-P');
+                    : archivePath.replace(new RegExp(`\\${path$1.sep}`, 'g'), '/'), '-P');
                 break;
         }
         // Platform specific args
@@ -73849,7 +82745,7 @@ function getDecompressionProgram(tarPath, compressionMethod, archivePath) {
                     ? [
                         'zstd -d --long=30 --force -o',
                         TarFilename,
-                        archivePath.replace(new RegExp(`\\${path.sep}`, 'g'), '/')
+                        archivePath.replace(new RegExp(`\\${path$1.sep}`, 'g'), '/')
                     ]
                     : [
                         '--use-compress-program',
@@ -73860,7 +82756,7 @@ function getDecompressionProgram(tarPath, compressionMethod, archivePath) {
                     ? [
                         'zstd -d --force -o',
                         TarFilename,
-                        archivePath.replace(new RegExp(`\\${path.sep}`, 'g'), '/')
+                        archivePath.replace(new RegExp(`\\${path$1.sep}`, 'g'), '/')
                     ]
                     : ['--use-compress-program', IS_WINDOWS$2 ? '"zstd -d"' : 'unzstd'];
             default:
@@ -73885,7 +82781,7 @@ function getCompressionProgram(tarPath, compressionMethod) {
                 return BSD_TAR_ZSTD
                     ? [
                         'zstd -T0 --long=30 --force -o',
-                        cacheFileName.replace(new RegExp(`\\${path.sep}`, 'g'), '/'),
+                        cacheFileName.replace(new RegExp(`\\${path$1.sep}`, 'g'), '/'),
                         TarFilename
                     ]
                     : [
@@ -73896,7 +82792,7 @@ function getCompressionProgram(tarPath, compressionMethod) {
                 return BSD_TAR_ZSTD
                     ? [
                         'zstd -T0 --force -o',
-                        cacheFileName.replace(new RegExp(`\\${path.sep}`, 'g'), '/'),
+                        cacheFileName.replace(new RegExp(`\\${path$1.sep}`, 'g'), '/'),
                         TarFilename
                     ]
                     : ['--use-compress-program', IS_WINDOWS$2 ? '"zstd -T0"' : 'zstdmt'];
@@ -73955,6 +82851,19 @@ class ValidationError extends Error {
         Object.setPrototypeOf(this, ValidationError.prototype);
     }
 }
+// Re-exported from constants so consumers keep referencing it here; the shared
+// value also drives detection in cacheHttpClient without duplicating the string.
+const CACHE_READ_DENIED_PREFIX = CacheReadDeniedMessagePrefix;
+// Raised when the cache backend denies a download URL because the run's token
+// has no readable cache scopes. Caching is best-effort, so restoreCache logs a
+// warning and reports a cache miss rather than rethrowing this.
+class CacheReadDeniedError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'CacheReadDeniedError';
+        Object.setPrototypeOf(this, CacheReadDeniedError.prototype);
+    }
+}
 function checkPaths(paths) {
     if (!paths || paths.length === 0) {
         throw new ValidationError(`Path Validation Error: At least one directory or file path is required`);
@@ -74002,6 +82911,12 @@ function restoreCache$1(paths_1, primaryKey_1, restoreKeys_1, options_1) {
         const cacheServiceVersion = getCacheServiceVersion();
         debug(`Cache service version: ${cacheServiceVersion}`);
         checkPaths(paths);
+        const cacheMode = getCacheMode();
+        if (!isCacheReadable(cacheMode)) {
+            info(`Cache restore skipped: the effective cache-mode '${cacheMode}' does not permit reads.`);
+            debug(`Skipped restore for paths [${paths.join(', ')}] with primary key '${primaryKey}'.`);
+            return undefined;
+        }
         switch (cacheServiceVersion) {
             case 'v2':
                 return yield restoreCacheV2(paths, primaryKey, restoreKeys, options, enableCrossOsArchive);
@@ -74023,6 +82938,7 @@ function restoreCache$1(paths_1, primaryKey_1, restoreKeys_1, options_1) {
  */
 function restoreCacheV1(paths_1, primaryKey_1, restoreKeys_1, options_1) {
     return __awaiter$2(this, arguments, void 0, function* (paths, primaryKey, restoreKeys, options, enableCrossOsArchive = false) {
+        var _a;
         restoreKeys = restoreKeys || [];
         const keys = [primaryKey, ...restoreKeys];
         debug('Resolved Keys:');
@@ -74037,10 +82953,26 @@ function restoreCacheV1(paths_1, primaryKey_1, restoreKeys_1, options_1) {
         let archivePath = '';
         try {
             // path are needed to compute version
-            const cacheEntry = yield getCacheEntry(keys, paths, {
-                compressionMethod,
-                enableCrossOsArchive
-            });
+            let cacheEntry;
+            try {
+                cacheEntry = yield getCacheEntry(keys, paths, {
+                    compressionMethod,
+                    enableCrossOsArchive
+                });
+            }
+            catch (error) {
+                // The v1 artifact cache service returns HTTP 403 with a
+                // `cache read denied:` body when the run's token has no readable cache
+                // scopes. getCacheEntry lives in a dependency-free internal module and
+                // cannot import CacheReadDeniedError without a circular dependency, so it
+                // only surfaces the raw denial message; we classify it into the typed
+                // error here so the outer catch and consumers can dispatch on it.
+                const errorMessage = (_a = error === null || error === void 0 ? void 0 : error.message) !== null && _a !== void 0 ? _a : '';
+                if (errorMessage.includes(CACHE_READ_DENIED_PREFIX)) {
+                    throw new CacheReadDeniedError(errorMessage);
+                }
+                throw error;
+            }
             if (!(cacheEntry === null || cacheEntry === void 0 ? void 0 : cacheEntry.archiveLocation)) {
                 // Cache not found
                 return undefined;
@@ -74049,7 +82981,7 @@ function restoreCacheV1(paths_1, primaryKey_1, restoreKeys_1, options_1) {
                 info('Lookup only - skipping download');
                 return cacheEntry.cacheKey;
             }
-            archivePath = path.join(yield createTempDirectory(), getCacheFileName(compressionMethod));
+            archivePath = path$1.join(yield createTempDirectory(), getCacheFileName(compressionMethod));
             debug(`Archive Path: ${archivePath}`);
             // Download the cache from the cache entry
             yield downloadCache(cacheEntry.archiveLocation, archivePath, options);
@@ -74069,7 +83001,9 @@ function restoreCacheV1(paths_1, primaryKey_1, restoreKeys_1, options_1) {
             }
             else {
                 // warn on cache restore failure and continue build
-                // Log server errors (5xx) as errors, all other errors as warnings
+                // Log server errors (5xx) as errors, all other errors as warnings.
+                // A read denied by policy (CacheReadDeniedError) is not an HttpClientError
+                // so it falls here and is warned, treated as a cache miss.
                 if (typedError instanceof HttpClientError &&
                     typeof typedError.statusCode === 'number' &&
                     typedError.statusCode >= 500) {
@@ -74104,6 +83038,7 @@ function restoreCacheV1(paths_1, primaryKey_1, restoreKeys_1, options_1) {
  */
 function restoreCacheV2(paths_1, primaryKey_1, restoreKeys_1, options_1) {
     return __awaiter$2(this, arguments, void 0, function* (paths, primaryKey, restoreKeys, options, enableCrossOsArchive = false) {
+        var _a;
         // Override UploadOptions to force the use of Azure
         options = Object.assign(Object.assign({}, options), { useAzureSdk: true });
         restoreKeys = restoreKeys || [];
@@ -74125,7 +83060,20 @@ function restoreCacheV2(paths_1, primaryKey_1, restoreKeys_1, options_1) {
                 restoreKeys,
                 version: getCacheVersion(paths, compressionMethod, enableCrossOsArchive)
             };
-            const response = yield twirpClient.GetCacheEntryDownloadURL(request);
+            let response;
+            try {
+                response = yield twirpClient.GetCacheEntryDownloadURL(request);
+            }
+            catch (error) {
+                // The receiver returns twirp PermissionDenied (403) when the run's token
+                // has no readable cache scopes. The client wraps that 403, so the stable
+                // prefix is embedded in the message rather than leading it.
+                const errorMessage = (_a = error === null || error === void 0 ? void 0 : error.message) !== null && _a !== void 0 ? _a : '';
+                if (errorMessage.includes(CACHE_READ_DENIED_PREFIX)) {
+                    throw new CacheReadDeniedError(errorMessage);
+                }
+                throw error;
+            }
             if (!response.ok) {
                 debug(`Cache not found for version ${request.version} of keys: ${keys.join(', ')}`);
                 return undefined;
@@ -74141,7 +83089,7 @@ function restoreCacheV2(paths_1, primaryKey_1, restoreKeys_1, options_1) {
                 info('Lookup only - skipping download');
                 return response.matchedKey;
             }
-            archivePath = path.join(yield createTempDirectory(), getCacheFileName(compressionMethod));
+            archivePath = path$1.join(yield createTempDirectory(), getCacheFileName(compressionMethod));
             debug(`Archive path: ${archivePath}`);
             debug(`Starting download of archive to: ${archivePath}`);
             yield downloadCache(response.signedDownloadUrl, archivePath, options);
@@ -74160,8 +83108,10 @@ function restoreCacheV2(paths_1, primaryKey_1, restoreKeys_1, options_1) {
                 throw error$1;
             }
             else {
-                // Supress all non-validation cache related errors because caching should be optional
-                // Log server errors (5xx) as errors, all other errors as warnings
+                // Suppress all non-validation cache related errors because caching should be optional
+                // Log server errors (5xx) as errors, all other errors as warnings.
+                // A read denied by policy (CacheReadDeniedError) is not an HttpClientError
+                // so it falls here and is warned, treated as a cache miss.
                 if (typedError instanceof HttpClientError &&
                     typeof typedError.statusCode === 'number' &&
                     typedError.statusCode >= 500) {
@@ -74186,9 +83136,20 @@ function restoreCacheV2(paths_1, primaryKey_1, restoreKeys_1, options_1) {
     });
 }
 
-const OCAML_VERSION = '5.4.0';
-const OPAM_VERSION = '2.5.0';
-const DUNE_VERSION = '3.20.2';
+const DEFAULT_OCAML_VERSION = '5.4.0';
+const OCAML_VERSION = getInput('ocaml-version') || DEFAULT_OCAML_VERSION;
+const OPAM_VERSION = '2.5.2';
+const DEFAULT_DUNE_VERSION = '3.22.1';
+// The dune version installed into a fresh switch.  This is a floor, not
+// a pin: a restored cache whose switch already has a newer dune keeps
+// that dune, because a downgrade forces a recompile of every package
+// built with dune -- all of Rocq.  See installDune() in rocq.ts.
+//
+// A project whose own dependencies require a newer dune should raise this
+// floor with the `dune-version` input.  Otherwise the fresh switch gets
+// DEFAULT_DUNE_VERSION, Rocq is built against it, and the project's
+// `opam install` then upgrades dune and rebuilds all of Rocq.
+const DUNE_VERSION = getInput('dune-version') || DEFAULT_DUNE_VERSION;
 const ROCQ_VERSION = getInput('rocq-version');
 const PLATFORM = os.platform();
 const ARCHITECTURE = os.arch();
@@ -74212,7 +83173,20 @@ var State;
 (function (State) {
     State["CachePrimaryKey"] = "CACHE_KEY";
     State["CacheMatchedKey"] = "CACHE_RESULT";
+    // Set by the main action once the switch is fully set up and Rocq is
+    // installed.  The post action refuses to save a cache without it.
+    State["SetupComplete"] = "SETUP_COMPLETE";
 })(State || (State = {}));
+// action outputs
+var Output;
+(function (Output) {
+    Output["CacheHit"] = "cache-hit";
+    Output["CachePrimaryKey"] = "cache-primary-key";
+    Output["CacheMatchedKey"] = "cache-matched-key";
+    Output["RocqVersion"] = "rocq-version";
+    Output["OCamlVersion"] = "ocaml-version";
+    Output["OpamSwitchPrefix"] = "opam-switch-prefix";
+})(Output || (Output = {}));
 
 (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -74313,8 +83287,8 @@ const userAgent = 'actions/tool-cache';
  */
 function downloadTool(url, dest, auth, headers) {
     return __awaiter(this, void 0, void 0, function* () {
-        dest = dest || path.join(_getTempDirectory(), crypto$1.randomUUID());
-        yield mkdirP(path.dirname(dest));
+        dest = dest || path$1.join(_getTempDirectory(), crypto$1.randomUUID());
+        yield mkdirP(path$1.dirname(dest));
         debug(`Downloading ${url}`);
         debug(`Destination ${dest}`);
         const maxAttempts = 3;
@@ -74484,7 +83458,7 @@ function cacheFile(sourceFile, targetFile, tool, version, arch) {
         const destFolder = yield _createToolPath(tool, version, arch);
         // copy instead of move. move can fail on Windows due to
         // anti-virus software having an open handle on a file.
-        const destPath = path.join(destFolder, targetFile);
+        const destPath = path$1.join(destFolder, targetFile);
         debug(`destination file ${destPath}`);
         yield cp(sourceFile, destPath);
         // write .complete
@@ -74514,7 +83488,7 @@ function find(toolName, versionSpec, arch) {
     let toolPath = '';
     if (versionSpec) {
         versionSpec = semverExports.clean(versionSpec) || '';
-        const cachePath = path.join(_getCacheDirectory(), toolName, versionSpec, arch);
+        const cachePath = path$1.join(_getCacheDirectory(), toolName, versionSpec, arch);
         debug(`checking cache: ${cachePath}`);
         if (fs.existsSync(cachePath) && fs.existsSync(`${cachePath}.complete`)) {
             debug(`Found tool in cache ${toolName} ${versionSpec} ${arch}`);
@@ -74535,12 +83509,12 @@ function find(toolName, versionSpec, arch) {
 function findAllVersions(toolName, arch) {
     const versions = [];
     arch = arch || os.arch();
-    const toolPath = path.join(_getCacheDirectory(), toolName);
+    const toolPath = path$1.join(_getCacheDirectory(), toolName);
     if (fs.existsSync(toolPath)) {
         const children = fs.readdirSync(toolPath);
         for (const child of children) {
             if (isExplicitVersion(child)) {
-                const fullPath = path.join(toolPath, child, arch || '');
+                const fullPath = path$1.join(toolPath, child, arch || '');
                 if (fs.existsSync(fullPath) && fs.existsSync(`${fullPath}.complete`)) {
                     versions.push(child);
                 }
@@ -74553,7 +83527,7 @@ function _createExtractFolder(dest) {
     return __awaiter(this, void 0, void 0, function* () {
         if (!dest) {
             // create a temp dir
-            dest = path.join(_getTempDirectory(), crypto$1.randomUUID());
+            dest = path$1.join(_getTempDirectory(), crypto$1.randomUUID());
         }
         yield mkdirP(dest);
         return dest;
@@ -74561,7 +83535,7 @@ function _createExtractFolder(dest) {
 }
 function _createToolPath(tool, version, arch) {
     return __awaiter(this, void 0, void 0, function* () {
-        const folderPath = path.join(_getCacheDirectory(), tool, semverExports.clean(version) || version, arch || '');
+        const folderPath = path$1.join(_getCacheDirectory(), tool, semverExports.clean(version) || version, arch || '');
         debug(`destination ${folderPath}`);
         const markerPath = `${folderPath}.complete`;
         yield rmRF(folderPath);
@@ -74571,7 +83545,7 @@ function _createToolPath(tool, version, arch) {
     });
 }
 function _completeToolPath(tool, version, arch) {
-    const folderPath = path.join(_getCacheDirectory(), tool, semverExports.clean(version) || version, arch || '');
+    const folderPath = path$1.join(_getCacheDirectory(), tool, semverExports.clean(version) || version, arch || '');
     const markerPath = `${folderPath}.complete`;
     fs.writeFileSync(markerPath, '');
     debug('finished caching tool');
@@ -75198,6 +84172,8 @@ class Alias extends NodeBase {
      * instance of the `source` anchor before this node.
      */
     resolve(doc, ctx) {
+        if (ctx?.maxAliasCount === 0)
+            throw new ReferenceError('Alias resolution is disabled');
         let nodes;
         if (ctx?.aliasResolveCache) {
             nodes = ctx.aliasResolveCache;
@@ -76047,6 +85023,7 @@ function createStringifyContext(doc, options) {
         nullStr: 'null',
         simpleKeys: false,
         singleQuote: null,
+        trailingComma: false,
         trueStr: 'true',
         verifyAliasOrder: true
     }, doc.schema.toStringOptions, options);
@@ -76327,18 +85304,18 @@ const isMergeKey = (ctx, key) => (merge.identify(key) ||
         merge.identify(key.value))) &&
     ctx?.doc.schema.tags.some(tag => tag.tag === merge.tag && tag.default);
 function addMergeToJSMap(ctx, map, value) {
-    value = ctx && isAlias(value) ? value.resolve(ctx.doc) : value;
-    if (isSeq(value))
-        for (const it of value.items)
+    const source = resolveAliasValue(ctx, value);
+    if (isSeq(source))
+        for (const it of source.items)
             mergeValue(ctx, map, it);
-    else if (Array.isArray(value))
-        for (const it of value)
+    else if (Array.isArray(source))
+        for (const it of source)
             mergeValue(ctx, map, it);
     else
-        mergeValue(ctx, map, value);
+        mergeValue(ctx, map, source);
 }
 function mergeValue(ctx, map, value) {
-    const source = ctx && isAlias(value) ? value.resolve(ctx.doc) : value;
+    const source = resolveAliasValue(ctx, value);
     if (!isMap(source))
         throw new Error('Merge sources must be maps or map aliases');
     const srcMap = source.toJSON(null, ctx, Map);
@@ -76360,6 +85337,9 @@ function mergeValue(ctx, map, value) {
         }
     }
     return map;
+}
+function resolveAliasValue(ctx, value) {
+    return ctx && isAlias(value) ? value.resolve(ctx.doc, ctx) : value;
 }
 
 function addPairToJSMap(ctx, map, { key, value }) {
@@ -76548,12 +85528,22 @@ function stringifyFlowCollection({ items }, ctx, { flowChars, itemIndent }) {
         if (comment)
             reqNewline = true;
         let str = stringify(item, itemCtx, () => (comment = null));
-        if (i < items.length - 1)
+        reqNewline || (reqNewline = lines.length > linesAtValue || str.includes('\n'));
+        if (i < items.length - 1) {
             str += ',';
+        }
+        else if (ctx.options.trailingComma) {
+            if (ctx.options.lineWidth > 0) {
+                reqNewline || (reqNewline = lines.reduce((sum, line) => sum + line.length + 2, 2) +
+                    (str.length + 2) >
+                    ctx.options.lineWidth);
+            }
+            if (reqNewline) {
+                str += ',';
+            }
+        }
         if (comment)
             str += lineComment(str, itemIndent, commentString(comment));
-        if (!reqNewline && (lines.length > linesAtValue || str.includes('\n')))
-            reqNewline = true;
         lines.push(str);
         linesAtValue = lines.length;
     }
@@ -76902,7 +85892,8 @@ function stringifyNumber({ format, minFractionDigits, tag, value }) {
     if (!format &&
         minFractionDigits &&
         (!tag || tag === 'tag:yaml.org,2002:float') &&
-        /^\d/.test(n)) {
+        /^-?\d/.test(n) &&
+        !n.includes('e')) {
         let i = n.indexOf('.');
         if (i < 0) {
             i = n.length;
@@ -79161,7 +88152,7 @@ function doubleQuotedValue(source, onError) {
                     next = source[++i + 1];
             }
             else if (next === 'x' || next === 'u' || next === 'U') {
-                const length = { x: 2, u: 4, U: 8 }[next];
+                const length = next === 'x' ? 2 : next === 'u' ? 4 : 8;
                 res += parseCharCode(source, i + 1, length, onError);
                 i += length;
             }
@@ -79231,12 +88222,14 @@ function parseCharCode(source, offset, length, onError) {
     const cc = source.substr(offset, length);
     const ok = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
     const code = ok ? parseInt(cc, 16) : NaN;
-    if (isNaN(code)) {
+    try {
+        return String.fromCodePoint(code);
+    }
+    catch {
         const raw = source.substr(offset - 2, length + 2);
         onError(offset - 2, 'BAD_DQ_ESCAPE', `Invalid escape sequence ${raw}`);
         return raw;
     }
-    return String.fromCodePoint(code);
 }
 
 function composeScalar(ctx, token, tagToken, onError) {
@@ -79367,19 +88360,26 @@ function composeNode(ctx, token, props, onError) {
         case 'block-map':
         case 'block-seq':
         case 'flow-collection':
-            node = composeCollection(CN, ctx, token, props, onError);
-            if (anchor)
-                node.anchor = anchor.source.substring(1);
+            try {
+                node = composeCollection(CN, ctx, token, props, onError);
+                if (anchor)
+                    node.anchor = anchor.source.substring(1);
+            }
+            catch (error) {
+                // Almost certainly here due to a stack overflow
+                const message = error instanceof Error ? error.message : String(error);
+                onError(token, 'RESOURCE_EXHAUSTION', message);
+            }
             break;
         default: {
             const message = token.type === 'error'
                 ? token.message
                 : `Unsupported token (type: ${token.type})`;
             onError(token, 'UNEXPECTED_TOKEN', message);
-            node = composeEmptyNode(ctx, token.offset, undefined, null, props, onError);
             isSrcToken = false;
         }
     }
+    node ?? (node = composeEmptyNode(ctx, token.offset, undefined, null, props, onError));
     if (anchor && node.anchor === '')
         onError(anchor, 'BAD_ALIAS', 'Anchor cannot be an empty string');
     if (atKey &&
@@ -79564,8 +88564,10 @@ class Composer {
             }
         }
         if (afterDoc) {
-            Array.prototype.push.apply(doc.errors, this.errors);
-            Array.prototype.push.apply(doc.warnings, this.warnings);
+            for (let i = 0; i < this.errors.length; ++i)
+                doc.errors.push(this.errors[i]);
+            for (let i = 0; i < this.warnings.length; ++i)
+                doc.warnings.push(this.warnings[i]);
         }
         else {
             doc.errors = this.errors;
@@ -80063,7 +89065,7 @@ class Lexer {
             const n = (yield* this.pushCount(1)) + (yield* this.pushSpaces(true));
             this.indentNext = this.indentValue + 1;
             this.indentValue += n;
-            return yield* this.parseBlockStart();
+            return 'block-start';
         }
         return 'doc';
     }
@@ -80384,32 +89386,36 @@ class Lexer {
         return 0;
     }
     *pushIndicators() {
-        switch (this.charAt(0)) {
-            case '!':
-                return ((yield* this.pushTag()) +
-                    (yield* this.pushSpaces(true)) +
-                    (yield* this.pushIndicators()));
-            case '&':
-                return ((yield* this.pushUntil(isNotAnchorChar)) +
-                    (yield* this.pushSpaces(true)) +
-                    (yield* this.pushIndicators()));
-            case '-': // this is an error
-            case '?': // this is an error outside flow collections
-            case ':': {
-                const inFlow = this.flowLevel > 0;
-                const ch1 = this.charAt(1);
-                if (isEmpty(ch1) || (inFlow && flowIndicatorChars.has(ch1))) {
-                    if (!inFlow)
-                        this.indentNext = this.indentValue + 1;
-                    else if (this.flowKey)
-                        this.flowKey = false;
-                    return ((yield* this.pushCount(1)) +
-                        (yield* this.pushSpaces(true)) +
-                        (yield* this.pushIndicators()));
+        let n = 0;
+        loop: while (true) {
+            switch (this.charAt(0)) {
+                case '!':
+                    n += yield* this.pushTag();
+                    n += yield* this.pushSpaces(true);
+                    continue loop;
+                case '&':
+                    n += yield* this.pushUntil(isNotAnchorChar);
+                    n += yield* this.pushSpaces(true);
+                    continue loop;
+                case '-': // this is an error
+                case '?': // this is an error outside flow collections
+                case ':': {
+                    const inFlow = this.flowLevel > 0;
+                    const ch1 = this.charAt(1);
+                    if (isEmpty(ch1) || (inFlow && flowIndicatorChars.has(ch1))) {
+                        if (!inFlow)
+                            this.indentNext = this.indentValue + 1;
+                        else if (this.flowKey)
+                            this.flowKey = false;
+                        n += yield* this.pushCount(1);
+                        n += yield* this.pushSpaces(true);
+                        continue loop;
+                    }
                 }
             }
+            break loop;
         }
-        return 0;
+        return n;
     }
     *pushTag() {
         if (this.charAt(1) === '<') {
@@ -80571,6 +89577,14 @@ function getFirstKeyStartProps(prev) {
     }
     return prev.splice(i, prev.length);
 }
+function arrayPushArray(target, source) {
+    // May exhaust call stack with large `source` array
+    if (source.length < 1e5)
+        Array.prototype.push.apply(target, source);
+    else
+        for (let i = 0; i < source.length; ++i)
+            target.push(source[i]);
+}
 function fixFlowSeqItems(fc) {
     if (fc.start.type === 'flow-seq-start') {
         for (const it of fc.items) {
@@ -80583,12 +89597,12 @@ function fixFlowSeqItems(fc) {
                 delete it.key;
                 if (isFlowToken(it.value)) {
                     if (it.value.end)
-                        Array.prototype.push.apply(it.value.end, it.sep);
+                        arrayPushArray(it.value.end, it.sep);
                     else
                         it.value.end = it.sep;
                 }
                 else
-                    Array.prototype.push.apply(it.start, it.sep);
+                    arrayPushArray(it.start, it.sep);
                 delete it.sep;
             }
         }
@@ -81006,7 +90020,7 @@ class Parser {
                         const prev = map.items[map.items.length - 2];
                         const end = prev?.value?.end;
                         if (Array.isArray(end)) {
-                            Array.prototype.push.apply(end, it.start);
+                            arrayPushArray(end, it.start);
                             end.push(this.sourceToken);
                             map.items.pop();
                             return;
@@ -81221,7 +90235,7 @@ class Parser {
                         const prev = seq.items[seq.items.length - 2];
                         const end = prev?.value?.end;
                         if (Array.isArray(end)) {
-                            Array.prototype.push.apply(end, it.start);
+                            arrayPushArray(end, it.start);
                             end.push(this.sourceToken);
                             seq.items.pop();
                             return;
@@ -81535,7 +90549,7 @@ async function acquireOpam() {
         if (IS_WINDOWS$1) {
             const zipPath = await downloadTool(browserDownloadUrl);
             const extractedPath = await extractZip(zipPath);
-            downloadedPath = path.join(extractedPath, opam);
+            downloadedPath = path$1.join(extractedPath, opam);
         }
         else {
             downloadedPath = await downloadTool(browserDownloadUrl);
@@ -81546,7 +90560,7 @@ async function acquireOpam() {
         // Make the binary executable on Unix-like systems
         if (!IS_WINDOWS$1) {
             const fs = await import('fs/promises');
-            await fs.chmod(path.join(cachedPath, opam), 0o755);
+            await fs.chmod(path$1.join(cachedPath, opam), 0o755);
         }
         addPath(cachedPath);
         info('Added opam to the path');
@@ -81558,7 +90572,7 @@ async function acquireOpam() {
 }
 async function initializeOpam() {
     // Set environment variables
-    const opamRoot = path.join(os.homedir(), '.opam');
+    const opamRoot = path$1.join(os.homedir(), '.opam');
     if (isDebug()) {
         exportVariable('OPAMVERBOSE', 1);
     }
@@ -81584,6 +90598,31 @@ async function initializeOpam() {
         '--enable-shell-hook',
     ]);
 }
+// Parse the stdout of `opam env` (Bourne shell syntax) into variable
+// assignments.
+//
+// opam emits one assignment per line, in either of these shapes:
+//
+//   VAR='value'; export VAR;
+//   export VAR='value'
+//
+// A single quote inside a value is written the POSIX way, by closing the
+// quote, emitting an escaped quote, and reopening: 'a'\''b' is the value
+// `a'b`.  Matching the value with [^']* stops at the first of those quotes and
+// silently truncates the variable, so match to the last quote on the line
+// instead and unescape afterwards.
+function parseOpamEnv(stdout) {
+    const vars = new Map();
+    for (const line of stdout.split('\n')) {
+        const match = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)='(.*)'\s*(?:;\s*export\s+\1\s*;?)?\s*$/);
+        if (!match) {
+            continue;
+        }
+        const [, varName, rawValue] = match;
+        vars.set(varName, rawValue.split("'\\''").join("'"));
+    }
+    return vars;
+}
 // Set environment variables specified by `opam env`.
 //
 // This has a similar effect to adding `eval $(opam env)` to ~/.profile.
@@ -81592,21 +90631,16 @@ async function setupOpamEnv() {
     const output = await getExecOutput('opam', ['env'], {
         silent: true,
     });
-    // Parse the output and set environment variables
-    const lines = output.stdout.split('\n');
-    for (const line of lines) {
-        // Look for export statements like: export VAR='value'
-        const match = line.match(/^(?:export\s+)?([A-Z_]+)='([^']*)'/);
-        if (match) {
-            const [, varName, value] = match;
-            exportVariable(varName, value);
-            // Special handling for PATH
-            if (varName === 'PATH') {
-                const paths = value.split(path.delimiter);
-                for (const p of paths) {
-                    if (p && !process.env.PATH?.includes(p)) {
-                        addPath(p);
-                    }
+    for (const [varName, value] of parseOpamEnv(output.stdout)) {
+        exportVariable(varName, value);
+        // Special handling for PATH.  Compare whole entries: a substring test
+        // reports a hit for any path that merely contains an existing entry, so a
+        // new /usr/local/bin never gets added once /usr/local/bin/foo is present.
+        if (varName === 'PATH') {
+            const existing = new Set((process.env.PATH ?? '').split(path$1.delimiter).filter((p) => p !== ''));
+            for (const p of value.split(path$1.delimiter)) {
+                if (p && !existing.has(p)) {
+                    addPath(p);
                 }
             }
         }
@@ -81618,14 +90652,57 @@ async function setupOpam() {
         await initializeOpam();
     });
 }
+// The name of the global switch this action creates and installs Rocq into.
+const SWITCH_NAME = 'default';
+async function switchCreate() {
+    await exec('opam', [
+        'switch',
+        'create',
+        SWITCH_NAME,
+        `ocaml-base-compiler.${OCAML_VERSION}`,
+    ]);
+}
 async function opamSwitchCreate() {
-    await group('Installing OCaml', async () => {
-        await exec('opam', [
-            'switch',
-            'create',
-            'default',
-            `ocaml-base-compiler.${OCAML_VERSION}`,
-        ]);
+    await group('Installing OCaml', switchCreate);
+}
+async function opamSwitchExists() {
+    const output = await getExecOutput('opam', ['switch', 'list', '--short'], {
+        silent: true,
+        ignoreReturnCode: true,
+    });
+    if (output.exitCode !== 0) {
+        return false;
+    }
+    return output.stdout
+        .split('\n')
+        .map((line) => stripAnsi(line).trim())
+        .includes(SWITCH_NAME);
+}
+// A restored cache is not guaranteed to contain a usable switch: the archive
+// can be partial, and a fallback cache key can match an archive saved by an
+// older version of this action.  main.ts only creates a switch on a cache
+// miss, so without this check a bad restore leaves every later opam command
+// failing for a reason the log does not explain.
+async function ensureSwitch() {
+    await group('Verifying opam switch', async () => {
+        if (!(await opamSwitchExists())) {
+            warning(`Restored cache has no "${SWITCH_NAME}" switch; creating one`);
+            await switchCreate();
+            return;
+        }
+        const ocaml = await opamInstalledVersion('ocaml', SWITCH_NAME);
+        if (ocaml === null) {
+            warning(`Switch "${SWITCH_NAME}" has no OCaml compiler installed; recreating it`);
+        }
+        else if (ocaml !== OCAML_VERSION) {
+            warning(`Switch "${SWITCH_NAME}" has OCaml ${ocaml}, but ${OCAML_VERSION} was requested; recreating it`);
+        }
+        else {
+            info(`Switch "${SWITCH_NAME}" has the requested OCaml ${ocaml}`);
+            return;
+        }
+        await exec('opam', ['switch', 'remove', SWITCH_NAME, '--yes']);
+        await switchCreate();
     });
 }
 async function opamRepoAdd(name, url) {
@@ -81664,8 +90741,8 @@ async function setupOpamRepositories() {
     });
 }
 async function configureDune() {
-    const configPath = path.join(os.homedir(), '.config/dune/config');
-    await fs.promises.mkdir(path.dirname(configPath), { recursive: true });
+    const configPath = path$1.join(os.homedir(), '.config/dune/config');
+    await fs.promises.mkdir(path$1.dirname(configPath), { recursive: true });
     await fs.promises.writeFile(configPath, '(lang dune 3.20)\n(display short)\n(cache enabled)\n');
 }
 async function opamUpdate() {
@@ -81673,8 +90750,40 @@ async function opamUpdate() {
         await exec('opam', ['update', '--development']);
     });
 }
-async function opamInstall(pkg, options = []) {
-    await exec('opam', ['install', pkg, ...options]);
+async function opamInstall(pkgs, options = []) {
+    const pkgList = Array.isArray(pkgs) ? pkgs : [pkgs];
+    await exec('opam', ['install', ...pkgList, ...options]);
+}
+// initializeOpam exports OPAMCOLOR=always, and opam colorizes even
+// single-field queries and --short listings, so escapes have to come off
+// before anything parses the output -- even where --color=never is passed.
+function stripAnsi(s) {
+    // eslint-disable-next-line no-control-regex
+    return s.replace(/\x1b\[[0-9;]*m/g, '');
+}
+// Parse the stdout of `opam show --field installed-version`.  Returns
+// null for a package that is not installed, which opam prints as `--`.
+function parseInstalledVersion(stdout) {
+    const version = stripAnsi(stdout).trim();
+    return version === '' || version === '--' ? null : version;
+}
+// The version of `pkg` installed in `switchName` (the current switch when
+// omitted), or null if it is not installed -- or opam cannot answer, e.g. for
+// an unknown package name or when no switch is selected.
+async function opamInstalledVersion(pkg, switchName) {
+    const switchArgs = switchName ? ['--switch', switchName] : [];
+    const output = await getExecOutput('opam', [
+        'show',
+        '--color=never',
+        '--field',
+        'installed-version',
+        ...switchArgs,
+        pkg,
+    ], { silent: true, ignoreReturnCode: true });
+    if (output.exitCode !== 0) {
+        return null;
+    }
+    return parseInstalledVersion(output.stdout);
 }
 async function opamPin(pkg, target, options = []) {
     await exec('opam', [
@@ -81690,6 +90799,163 @@ async function opamList() {
     await group('List installed opam packages', async () => {
         await exec('opam', ['list', '--installed', '--wrap']);
     });
+}
+
+// Matches the packages that make up a Rocq release itself: the coq and
+// rocq-prover metapackages, the post-rename rocq-* packages, and the coq-*
+// compat shims that ship from the same source tree.
+//
+// This is deliberately an explicit list rather than a "starts with coq or
+// rocq" test, which would also match every coq-* library package on the
+// opam repository (coq-mathcomp, coq-iris, ...).  Treating one of those as
+// the Rocq installation would install the wrong thing.
+const ROCQ_PACKAGE_PATTERN = /^(?:coq|coq-core|coq-stdlib|coqide-server|rocq-prover|rocq-core|rocq-runtime|rocq-stdlib)(?:\.|$)/;
+// The roots of the post-rename Rocq package graph.
+const ROCQ_CORE_PATTERN = /^(?:rocq-core|rocq-prover)(?:\.|$)/;
+/**
+ * Extract a balanced bracketed list from opam file contents.
+ *
+ * @param contents Full opam file contents.
+ * @param start Index of the opening `[` that starts the list.
+ * @returns The list contents including the outer brackets, or undefined if the
+ * list is not balanced.
+ */
+function extractList(contents, start) {
+    let depth = 0;
+    let inString = false;
+    for (let i = start; i < contents.length; i++) {
+        const char = contents[i];
+        if (char === '"' && contents[i - 1] !== '\\') {
+            inString = !inString;
+            continue;
+        }
+        if (inString) {
+            continue;
+        }
+        if (char === '[') {
+            depth += 1;
+        }
+        else if (char === ']') {
+            depth -= 1;
+            if (depth === 0) {
+                return contents.slice(start, i + 1);
+            }
+        }
+    }
+}
+/**
+ * Parse Rocq-related pin-depends entries from a single opam file.
+ *
+ * A valid Rocq pin is any `pin-depends` entry naming a package that is part of
+ * a Rocq release itself; see ROCQ_PACKAGE_PATTERN.
+ *
+ * @param contents Full opam file contents.
+ * @returns Rocq pin entries found in the file, in file order.
+ */
+function extractRocqPins(contents) {
+    const pins = [];
+    const pinDependsPattern = /pin-depends\s*:/g;
+    let match;
+    while ((match = pinDependsPattern.exec(contents)) !== null) {
+        const listStart = contents.indexOf('[', match.index);
+        if (listStart === -1) {
+            continue;
+        }
+        const list = extractList(contents, listStart);
+        if (!list) {
+            continue;
+        }
+        const pinPattern = /\[\s*"([^"]+)"\s*"([^"]+)"\s*\]/g;
+        let pinMatch;
+        while ((pinMatch = pinPattern.exec(list)) !== null) {
+            const [, pkg, target] = pinMatch;
+            if (ROCQ_PACKAGE_PATTERN.test(pkg)) {
+                pins.push({ pkg, target });
+            }
+        }
+    }
+    return pins;
+}
+/**
+ * Read the opam files matched by `cache-key-opam-files` and collect any
+ * Rocq-related pin-depends entries.
+ *
+ * @returns A sorted list of unique Rocq pins.
+ * @throws If the same Rocq package is pinned to conflicting targets.
+ */
+async function getPinnedRocqPackages() {
+    const cacheKeyFiles = getInput('cache-key-opam-files');
+    if (!cacheKeyFiles.trim()) {
+        return [];
+    }
+    const globber = await create(cacheKeyFiles);
+    const packages = new Map();
+    for await (const file of globber.globGenerator()) {
+        const contents = await fs$1.readFile(file, 'utf8');
+        for (const pin of extractRocqPins(contents)) {
+            const existingTarget = packages.get(pin.pkg);
+            if (existingTarget && existingTarget !== pin.target) {
+                throw new Error(`Conflicting Rocq pin-depends targets found for ${pin.pkg}: ${existingTarget} and ${pin.target}`);
+            }
+            packages.set(pin.pkg, pin.target);
+        }
+    }
+    return [...packages.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([pkg, target]) => ({ pkg, target }));
+}
+/**
+ * Produce a stable hash fragment for Rocq pin-depends entries.
+ *
+ * The cache key only needs a short, deterministic identifier; when no Rocq
+ * pins are present, undefined is returned so the caller can keep using the
+ * normal version-based cache key.
+ *
+ * @returns A 16-character SHA-256 prefix for the current Rocq pins, or
+ * undefined when no Rocq pins are present.
+ */
+async function getPinnedRocqCacheKeyPart() {
+    const pins = await getPinnedRocqPackages();
+    if (pins.length === 0) {
+        return;
+    }
+    return createHash('sha256')
+        .update(JSON.stringify(pins))
+        .digest('hex')
+        .slice(0, 16);
+}
+/**
+ * Choose the Rocq packages to install from the discovered pin-depends entries.
+ *
+ * The precedence matches the common layouts for Rocq source pins:
+ * `coq.dev` first, then `coq`, then a single pinned package when there is only
+ * one candidate. When multiple `rocq-*` packages are pinned without a `coq`
+ * metapackage, all pins are installed explicitly since `rocq-core` does not
+ * depend on `rocq-stdlib`.
+ *
+ * @param pins Rocq-related pin-depends entries.
+ * @returns The package names to pass to `opam install`.
+ * @throws If multiple Rocq pins are present without an explicit `coq`,
+ * `coq.dev`, or `rocq-core` package.
+ */
+function getPinnedRocqInstallPackages(pins) {
+    if (pins.some((pin) => pin.pkg === 'coq.dev')) {
+        return ['coq.dev'];
+    }
+    if (pins.some((pin) => pin.pkg === 'coq')) {
+        return ['coq'];
+    }
+    const rocqProver = pins.find((pin) => /^rocq-prover(?:\.|$)/.test(pin.pkg));
+    if (rocqProver) {
+        return [rocqProver.pkg];
+    }
+    if (pins.length === 1) {
+        return [pins[0].pkg];
+    }
+    if (pins.some((pin) => ROCQ_CORE_PATTERN.test(pin.pkg))) {
+        return pins.map((pin) => pin.pkg);
+    }
+    throw new Error('Found Rocq pin-depends, but could not determine which package to install. Pin coq, coq.dev, or rocq-core explicitly.');
 }
 
 function getMondayDate() {
@@ -81712,15 +90978,15 @@ function getMondayDate() {
 
 // Get the directory containing weekly rocq clones
 function getRocqWeeklyDir() {
-    return path.join(os.homedir(), 'rocq-weekly');
+    return path$1.join(os.homedir(), 'rocq-weekly');
 }
 // Get the path to the rocq repository
 function getRocqRepoPath() {
-    return path.join(getRocqWeeklyDir(), 'rocq');
+    return path$1.join(getRocqWeeklyDir(), 'rocq');
 }
 // Get the path to the stdlib repository
 function getStdlibRepoPath() {
-    return path.join(getRocqWeeklyDir(), 'stdlib');
+    return path$1.join(getRocqWeeklyDir(), 'stdlib');
 }
 // Clone or update a git repository
 async function cloneOrUpdateRepo(repoUrl, repoPath) {
@@ -81803,11 +91069,20 @@ async function installRocqWeekly() {
     const stdlibCommit = await getMondayCommitHash(stdlibRepoPath);
     info(`Using rocq commit: ${rocqCommit}`);
     info(`Using stdlib commit: ${stdlibCommit}`);
-    // Pin dev packages to specific commits
+    // Pin every dev package in the cone to a commit.  rocq-stdlib was the
+    // omission: coq-stdlib was pinned to Monday's stdlib commit while
+    // rocq-stdlib -- the package that actually holds the library -- was
+    // left to resolve from the dev repo, whose branch moves.  So a
+    // "weekly" switch was not pinned to Monday for that package, and the
+    // two stdlib packages could come from different commits.  An unpinned
+    // dev package is also perpetually out of date as far as opam is
+    // concerned, so any dev sync marks it -- and coq-stdlib, which uses
+    // it, and the coq metapackage above that -- for recompilation.
     await opamPin('rocq-runtime.dev', `git+file://${rocqRepoPath}#${rocqCommit}`);
     await opamPin('rocq-core.dev', `git+file://${rocqRepoPath}#${rocqCommit}`);
     await opamPin('coqide-server.dev', `git+file://${rocqRepoPath}#${rocqCommit}`);
     await opamPin('coq-core.dev', `git+file://${rocqRepoPath}#${rocqCommit}`);
+    await opamPin('rocq-stdlib.dev', `git+file://${stdlibRepoPath}#${stdlibCommit}`);
     await opamPin('coq-stdlib.dev', `git+file://${stdlibRepoPath}#${stdlibCommit}`);
     await opamPin('coq.dev', '--dev-repo');
     // Install the pinned packages
@@ -81822,6 +91097,7 @@ async function installRocqDev() {
     await opamPin('rocq-core.dev', rocqUrl);
     await opamPin('coqide-server.dev', rocqUrl);
     await opamPin('coq-core.dev', rocqUrl);
+    await opamPin('rocq-stdlib.dev', stdlibUrl);
     await opamPin('coq-stdlib.dev', stdlibUrl);
     // NOTE: this meta package is not in any rocq source repo; only found in rocq
     // core-dev opam repo
@@ -81831,17 +91107,107 @@ async function installRocqDev() {
 }
 async function installRocqLatest() {
     info('Installing latest Rocq version');
-    await opamInstall('coq', ['--unset-root']);
+    // the coq compat metapackage lags behind releases (and may stop being
+    // published), so install the real packages instead
+    await opamInstall(['rocq-core', 'rocq-stdlib'], ['--unset-root']);
 }
 async function installRocqVersion(version) {
     info(`Installing Rocq version ${version}`);
-    await opamInstall(`coq.${version}`, ['--unset-root']);
+    if (version.startsWith('8.')) {
+        // rocq-core only exists for 9.0+
+        await opamInstall(`coq.${version}`, ['--unset-root']);
+        return;
+    }
+    // rocq-stdlib is versioned independently of rocq-core, so leave it
+    // unconstrained and let the solver pick a compatible version
+    await opamInstall([`rocq-core.${version}`, 'rocq-stdlib'], ['--unset-root']);
+}
+async function installPinnedRocq(pins) {
+    const installPackages = getPinnedRocqInstallPackages(pins);
+    info(`Installing Rocq from pin-depends using ${installPackages.join(', ')} (${pins.length} pinned package${pins.length === 1 ? '' : 's'})`);
+    for (const pin of pins) {
+        await opamPin(pin.pkg, pin.target);
+    }
+    await opamInstall(installPackages, ['--unset-root']);
+}
+// Compare two dotted-numeric versions.  Returns a negative number if a <
+// b, zero if they are equal, and a positive number if a > b.  Returns
+// null if either is not purely dotted-numeric, which is the caller's
+// signal that it cannot decide.
+function compareDottedVersions(a, b) {
+    const parse = (v) => {
+        const parts = v.split('.');
+        const nums = parts.map((p) => (/^\d+$/.test(p) ? Number(p) : NaN));
+        return nums.some(Number.isNaN) ? null : nums;
+    };
+    const av = parse(a);
+    const bv = parse(b);
+    if (av === null || bv === null) {
+        return null;
+    }
+    for (let i = 0; i < Math.max(av.length, bv.length); i++) {
+        const diff = (av[i] ?? 0) - (bv[i] ?? 0);
+        if (diff !== 0) {
+            return diff;
+        }
+    }
+    return 0;
+}
+// Install dune, treating DUNE_VERSION as a floor rather than a pin.
+//
+// A restored cache can hold a switch whose dune the project's own
+// `opam install` already upgraded past DUNE_VERSION.  Asking for
+// `dune.DUNE_VERSION` there is a downgrade, and opam responds by
+// recompiling every package that uses dune -- all of Rocq -- twice per
+// run, once down and once back up when the project's dependencies are
+// installed.  It also uninstalls any package whose constraint the older
+// dune violates.  So keep a dune that is already new enough.
+//
+// The floor comes from the `dune-version` input.  Leaving it at the default
+// when the project needs a newer dune is not a correctness problem, but it
+// costs a full rebuild of Rocq on every cold run: Rocq is built here against
+// the default dune, and the project's own `opam install` then upgrades dune,
+// which recompiles everything that uses it.
+async function installDune() {
+    const installed = await opamInstalledVersion('dune');
+    if (installed !== null) {
+        const cmp = compareDottedVersions(installed, DUNE_VERSION);
+        if (cmp !== null && cmp >= 0) {
+            info(`dune ${installed} is already installed and is at least ${DUNE_VERSION}; keeping it`);
+            return;
+        }
+    }
+    await opamInstall(`dune.${DUNE_VERSION}`);
+}
+// Packages that carry a Rocq release's version number, most specific first.
+// rocq-core is the root of the post-rename package graph; coq is the compat
+// metapackage still used by the 8.x line and by dev/weekly pins.
+const ROCQ_VERSION_PACKAGES = ['rocq-core', 'coq', 'coq-core'];
+// The Rocq version actually present in the switch after installation.  This is
+// what the resolver picked, which for `latest`, `dev`, and a partial version
+// input is not something the caller can predict.  Returns null if no known
+// Rocq package is installed.
+async function getInstalledRocqVersion() {
+    for (const pkg of ROCQ_VERSION_PACKAGES) {
+        const version = await opamInstalledVersion(pkg);
+        if (version !== null) {
+            return version;
+        }
+    }
+    return null;
 }
 async function installRocq(version) {
     await group('Installing Rocq', async () => {
-        // install dune: make this explicit and use a fixed version
-        await opamInstall(`dune.${DUNE_VERSION}`);
-        if (version === 'dev') {
+        // Configure dune before anything is built, not after: Rocq itself is a
+        // dune project, so a cache-enabled config written first lets the Rocq
+        // build populate the dune cache that the post action saves.
+        await configureDune();
+        await installDune();
+        const pinnedRocqPackages = await getPinnedRocqPackages();
+        if (pinnedRocqPackages.length > 0) {
+            await installPinnedRocq(pinnedRocqPackages);
+        }
+        else if (version === 'dev') {
             await installRocqDev();
         }
         else if (version === 'weekly') {
@@ -81854,13 +91220,38 @@ async function installRocq(version) {
             await installRocqVersion(version);
         }
         await setupOpamEnv();
-        await configureDune();
     });
 }
 
-const CACHE_VERSION = 'v2';
-const CACHE_PLATFORM_PREFIX = `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}`;
-function getRocqVersionCacheKey() {
+const CACHE_VERSION = 'v4';
+// The opam root's on-disk format is tied to opam's major.minor, so a cache
+// saved by a different opam series should not be restored into this one.
+const OPAM_SERIES = OPAM_VERSION.split('.').slice(0, 2).join('.');
+// The switch's compiler and the opam root format both have to be part of every
+// key, including the fallback prefixes.  main.ts only creates a switch on a
+// cache miss, so a cache that is allowed to match across OCaml versions pins
+// the switch to whatever compiler it was built with -- bumping OCAML_VERSION
+// would then have no effect at all.
+// The requested dune floor, for the same reason the OCaml version is in the
+// key: installDune() keeps a restored switch's dune when it already meets the
+// floor, so a key that matched across dune versions would let an old cache
+// pin dune to whatever it was built with and make raising `dune-version` a
+// no-op.  It has to be in the fallback prefixes too, not just the primary key.
+//
+// The default is spelled as no segment at all rather than `-dune-3.22.1`.
+// Every cache in existence was written by a run whose floor was the default,
+// so this keeps them all restorable; naming the default explicitly would
+// invalidate every cache in every repository using this action, which is a
+// steep price for a cosmetically more uniform key.
+function duneCacheKeyPart(duneVersion) {
+    return duneVersion === DEFAULT_DUNE_VERSION ? '' : `-dune-${duneVersion}`;
+}
+const CACHE_PLATFORM_PREFIX = `setup-rocq-${CACHE_VERSION}-${PLATFORM}-${ARCHITECTURE}-ocaml-${OCAML_VERSION}-opam-${OPAM_SERIES}${duneCacheKeyPart(DUNE_VERSION)}`;
+async function getRocqVersionCacheKey() {
+    const pinnedRocqCacheKey = await getPinnedRocqCacheKeyPart();
+    if (pinnedRocqCacheKey) {
+        return `${CACHE_PLATFORM_PREFIX}-rocq-pinned-${pinnedRocqCacheKey}`;
+    }
     let cacheKey = `${CACHE_PLATFORM_PREFIX}-rocq-${ROCQ_VERSION}`;
     if (ROCQ_VERSION === 'weekly') {
         const date = getMondayDate().toISOString().split('T')[0];
@@ -81870,18 +91261,19 @@ function getRocqVersionCacheKey() {
 }
 async function getCacheKey() {
     const cacheKeyFiles = getInput('cache-key-opam-files');
-    let cacheKey = getRocqVersionCacheKey();
+    let cacheKey = await getRocqVersionCacheKey();
     const depHash = await hashFiles(cacheKeyFiles);
     cacheKey += `-${depHash}`;
     return cacheKey;
 }
 function getOpamRoot() {
-    return path.join(os.homedir(), '.opam');
+    return path$1.join(os.homedir(), '.opam');
 }
-function getCachePaths() {
+async function getCachePaths() {
     const paths = [getOpamRoot(), DUNE_CACHE_ROOT];
+    const pinnedRocqPackages = await getPinnedRocqPackages();
     // For weekly version, also cache the directory with cloned repositories
-    if (ROCQ_VERSION === 'weekly') {
+    if (ROCQ_VERSION === 'weekly' && pinnedRocqPackages.length === 0) {
         paths.push(getRocqWeeklyDir());
     }
     // On Linux, cache apt packages in user-accessible directory
@@ -81894,8 +91286,8 @@ async function restoreAptCache() {
     if (!IS_LINUX) {
         return;
     }
-    const archivesDir = path.join(APT_CACHE_DIR, 'archives');
-    const listsDir = path.join(APT_CACHE_DIR, 'lists');
+    const archivesDir = path$1.join(APT_CACHE_DIR, 'archives');
+    const listsDir = path$1.join(APT_CACHE_DIR, 'lists');
     try {
         // Check if cached directories exist
         try {
@@ -81934,13 +91326,23 @@ async function restoreAptCache() {
         }
     }
 }
+/**
+ * Restore the opam cache.
+ *
+ * The keys are returned rather than left for the caller to read back with
+ * core.getState().  saveState() writes to the state file, but getState() reads
+ * environment variables the runner populates at step *start*, so state written
+ * during this step reads back empty until the post step.  The caller needs
+ * these values now, to report them as outputs.
+ */
 async function restoreCache() {
     if (!isFeatureAvailable()) {
         warning('cache feature is not available, not restoring');
-        return false;
+        return { restored: false, primaryKey: '', matchedKey: '' };
     }
-    const cachePaths = getCachePaths();
+    const cachePaths = await getCachePaths();
     const cacheKey = await getCacheKey();
+    const rocqVersionCacheKey = await getRocqVersionCacheKey();
     // remember key used to later save cache
     saveState(State.CachePrimaryKey, cacheKey);
     info(`Attempting to restore cache with key: ${cacheKey}`);
@@ -81948,7 +91350,7 @@ async function restoreCache() {
     try {
         const start = Date.now();
         const restoredKey = await restoreCache$1(cachePaths, cacheKey, [
-            `${getRocqVersionCacheKey()}-`,
+            `${rocqVersionCacheKey}-`,
             `${CACHE_PLATFORM_PREFIX}-`,
         ]);
         const elapsedMs = Date.now() - start;
@@ -81958,18 +91360,18 @@ async function restoreCache() {
             saveState(State.CacheMatchedKey, restoredKey);
             // Restore apt cache to system directories
             await restoreAptCache();
-            return true;
+            return { restored: true, primaryKey: cacheKey, matchedKey: restoredKey };
         }
         else {
             info('Cache not found');
-            return false;
+            return { restored: false, primaryKey: cacheKey, matchedKey: '' };
         }
     }
     catch (error) {
         if (error instanceof Error) {
             warning(`Failed to restore cache: ${error.message}`);
         }
-        return false;
+        return { restored: false, primaryKey: cacheKey, matchedKey: '' };
     }
 }
 
@@ -82025,12 +91427,41 @@ async function installSystemPackages() {
     });
 }
 
+// Report what was actually installed.  For `latest`, `dev`, and a partial
+// version input the resolver's choice is not something the caller can predict,
+// so it has to be read back out of the switch.
+async function setOutputs() {
+    const rocqVersion = await getInstalledRocqVersion();
+    if (rocqVersion === null) {
+        warning('Could not determine the installed Rocq version');
+    }
+    else {
+        info(`Installed Rocq ${rocqVersion}`);
+    }
+    setOutput(Output.RocqVersion, rocqVersion ?? '');
+    const ocamlVersion = await opamInstalledVersion('ocaml');
+    setOutput(Output.OCamlVersion, ocamlVersion ?? '');
+    // setupOpamEnv() ran inside installRocq(), so opam env's variables are in
+    // process.env by now.
+    setOutput(Output.OpamSwitchPrefix, process.env.OPAM_SWITCH_PREFIX ?? '');
+}
 async function run() {
     try {
         info('Setting up Rocq development environment');
         startGroup('Restoring opam cache');
-        const cacheRestored = await restoreCache();
+        const cacheResult = await restoreCache();
+        const cacheRestored = cacheResult.restored;
         endGroup();
+        setOutput(Output.CacheHit, String(cacheRestored));
+        // The keys themselves, not just whether something matched.  A fallback
+        // key is a prefix match, so "restored a cache" does not say *which* one:
+        // only the matched key distinguishes a compatible archive from one that
+        // should never have been eligible.  Empty when nothing was restored.
+        //
+        // These come back from restoreCache() rather than core.getState(), which
+        // cannot see state written during this same step.
+        setOutput(Output.CachePrimaryKey, cacheResult.primaryKey);
+        setOutput(Output.CacheMatchedKey, cacheResult.matchedKey);
         await installSystemPackages();
         await setupOpam();
         await setupOpamRepositories();
@@ -82038,11 +91469,16 @@ async function run() {
             await opamSwitchCreate();
         }
         else {
+            await ensureSwitch();
             await opamUpdate();
         }
         await opamList();
         // Install Rocq
         await installRocq(ROCQ_VERSION);
+        await setOutputs();
+        // Only now is the switch complete enough to be worth caching.  The post
+        // action runs even when the job failed and checks this state.
+        saveState(State.SetupComplete, 'true');
         info('Rocq development environment set up successfully');
     }
     catch (error) {
